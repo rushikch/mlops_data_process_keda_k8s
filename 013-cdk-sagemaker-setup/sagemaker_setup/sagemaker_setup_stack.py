@@ -211,7 +211,7 @@ class SagemakerSetupStack(Stack):
             connection=ec2.Port.all_traffic(),
             description="Allow all inbound traffic"
         )
-        
+
         # Create SageMaker Domain
         self.sagemaker_domain = sagemaker.CfnDomain(
             self,
@@ -232,7 +232,7 @@ class SagemakerSetupStack(Stack):
             self,
             "SageMakerUserProfile",
             domain_id=self.sagemaker_domain.attr_domain_id,
-            user_profile_name="default-user",
+            user_profile_name="mlops-user",
             user_settings=sagemaker.CfnUserProfile.UserSettingsProperty(
                 execution_role=self.sagemaker_studio_user_role.role_arn
             )
