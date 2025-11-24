@@ -1,6 +1,5 @@
 from constructs import Construct
 from aws_cdk import (
-    Duration,
     Stack,
     aws_iam as iam,
     aws_ec2 as ec2,
@@ -12,6 +11,11 @@ class SagemakerSetupStack(Stack):
 
     def __init__(self, scope: Construct, construct_id: str, app_prefix: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
+
+        """
+        Initialize the SageMaker Setup Stack.
+        :param app_prefix: Prefix for naming resources.
+        """
 
         # VPC and Networking setup 
         self.__setup_networking(app_prefix)
