@@ -22,6 +22,9 @@ class SagemakerSetupStack(Stack):
         # Create SageMaker Domain and User Profile
         self.__setup_sagemaker_domain_and_user(app_prefix)
 
+        # Create SageMaker Notebook Instance
+        self.__setup_sagemaker_notebook_instance(app_prefix)
+
     def __setup_networking(self, app_prefix: str) -> None:
         """
         Setup VPC and Networking components for SageMaker environment.
@@ -236,4 +239,38 @@ class SagemakerSetupStack(Stack):
             user_settings=sagemaker.CfnUserProfile.UserSettingsProperty(
                 execution_role=self.sagemaker_studio_user_role.role_arn
             )
+        )
+    
+    def __setup_sagemaker_notebook_instance(self, app_prefix: str) -> None:
+        """
+        Setup SageMaker Notebook Instance.
+        """
+        
+        # Create IAM Role for SageMaker Notebook Instance
+        self.sagemaker_notebook_role = iam.Role(
+            self,
+            "SageMakerNotebookRole",
+            role_name=f"{app_prefix}-sagemaker-notebook-role",
+            assumed_by=iam.ServicePrincipal("sagemaker.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSageMakerFullAccess"),
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonS3FullAccess"),
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEC2FullAccess"),
+                iam.ManagedPolicy.from_aws_managed_policy_name("CloudWatchLogsFullAccess")
+            ]
+        )
+
+        # Create SageMaker Notebook Instance
+        self.sagemaker_notebook_instance = sagemaker.CfnNotebookInstance(
+            self,
+            "SageMakerNotebookInstance",
+            notebook_instance_name=f"{app_prefix}-notebook-instance",
+            instance_type="ml.t3.medium",
+            role_arn=self.sagemaker_notebook_role.role_arn,
+            subnet_id=self.private_subnets[0].ref,
+            security_group_ids=[self.sagemaker_sg.security_group_id],
+            direct_internet_access="Enabled",
+            root_access="Enabled",
+            volume_size_in_gb=10,
+            tags=[{"key": "Name", "value": f"{app_prefix}-notebook-instance"}]
         )
