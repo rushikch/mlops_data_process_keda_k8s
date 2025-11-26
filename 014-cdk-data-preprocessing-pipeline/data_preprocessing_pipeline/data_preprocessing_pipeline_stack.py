@@ -95,7 +95,7 @@ class DataPreprocessingPipelineStack(Stack):
             self,
             "DataProcessingJob",
             processing_job_name=f"{app_prefix}-data-preprocessing-job",
-            role_arn=self.processing_job_role.role_arn,
+            role_arn=self.data_preprocessing_role.role_arn,
             
             # App Specification - using SKLearn container
             app_specification=sagemaker.CfnProcessingJob.AppSpecificationProperty(
