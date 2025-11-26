@@ -62,6 +62,7 @@ This repository provides practical examples and templates for implementing MLOps
 - **AWS Documentation**: [AWS ML Documentation](https://docs.aws.amazon.com/machine-learning/)
 - **Sagemaker CDK Documentation**: [AWS CDK Docs](https://docs.aws.amazon.com/cdk/api/v2/python/aws_cdk.aws_sagemaker.html)
 - **ECR Images for SageMaker AI provided algorithms and Deep Learning Containers (DLC)**: [Docker Registry Paths and Example Code for US East (N. Virginia) (us-east-1)](https://docs.aws.amazon.com/sagemaker/latest/dg-ecr-paths/ecr-us-east-1.html#sklearn-us-east-1)
+- **Use Your Own Processing Code**: [Use Your Own Processing Code](https://docs.aws.amazon.com/sagemaker/latest/dg/build-your-own-processing-container.html)
 
 ## 📄 License
 

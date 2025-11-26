@@ -165,20 +165,20 @@ class DataPreprocessingPipelineStack(Stack):
             processing_resources=sagemaker.CfnProcessingJob.ProcessingResourcesProperty(
                 cluster_config=sagemaker.CfnProcessingJob.ClusterConfigProperty(
                     instance_count=1,
-                    instance_type="ml.m5.xlarge",
+                    instance_type="ml.t3.medium",
                     volume_size_in_gb=30
                 )
             ),
             
             # Network Configuration
-            network_config=sagemaker.CfnProcessingJob.NetworkConfigProperty(
-                enable_inter_container_traffic_encryption=False,
-                enable_network_isolation=False,
-                vpc_config=sagemaker.CfnProcessingJob.VpcConfigProperty(
-                    subnets=[subnet.ref for subnet in self.private_subnets],
-                    security_group_ids=[self.sagemaker_sg.security_group_id]
-                )
-            ),
+            # network_config=sagemaker.CfnProcessingJob.NetworkConfigProperty(
+            #     enable_inter_container_traffic_encryption=False,
+            #     enable_network_isolation=False,
+            #     vpc_config=sagemaker.CfnProcessingJob.VpcConfigProperty(
+            #         subnets=[subnet.ref for subnet in self.private_subnets],
+            #         security_group_ids=[self.sagemaker_sg.security_group_id]
+            #     )
+            # ),
             
             # Stopping Condition
             stopping_condition=sagemaker.CfnProcessingJob.StoppingConditionProperty(
