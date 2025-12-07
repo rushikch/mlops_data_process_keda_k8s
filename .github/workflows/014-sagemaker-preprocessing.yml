@@ -1,0 +1,146 @@
+name: SageMaker Preprocessing Job
+
+on:
+  workflow_dispatch:
+    inputs:
+      input_data_path:
+        description: 'S3 path for input data (e.g., s3://bucket/path/)'
+        required: true
+        default: 's3://mlops-data-preprocessing-pipeline-raw-data-bucket/input/'
+      output_data_path:
+        description: 'S3 path for output data'
+        required: true
+        default: 's3://mlops-data-preprocessing-pipeline-processed-data-bucket/output/'
+  push:
+    branches:
+      - main
+    paths:
+      - 'preprocessing/**'
+      - '.github/workflows/014-sagemaker-preprocessing.yml'
+
+env:
+  AWS_REGION: us-east-1  # Change to your region
+  APP_PREFIX: mlops-data-preprocessing-pipeline  # Change to match your CDK app_prefix
+  PROCESSING_INSTANCE_TYPE: ml.t3.medium
+  PROCESSING_INSTANCE_COUNT: 1
+  SKLEARN_VERSION: '1.2-1'  # SageMaker scikit-learn version
+
+jobs:
+  run-preprocessing:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          # Alternatively, use access keys (less secure):
+          # aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          # aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install boto3 sagemaker
+
+      - name: Get SageMaker scikit-learn image URI
+        id: get-image
+        run: |
+          python << EOF
+          import boto3
+          from sagemaker import image_uris
+          
+          image_uri = image_uris.retrieve(
+              framework='sklearn',
+              region='${{ env.AWS_REGION }}',
+              version='${{ env.SKLEARN_VERSION }}',
+              image_scope='training'  # Can use 'training' images for processing jobs
+          )
+          
+          print(f"Using SageMaker image: {image_uri}")
+          
+          # Write to GITHUB_OUTPUT
+          with open('$GITHUB_OUTPUT', 'a') as f:
+              f.write(f"image_uri={image_uri}\n")
+          EOF
+
+      - name: Upload preprocessing script to S3
+        run: |
+          aws s3 cp preprocessing/preprocessing.py \
+            s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing.py
+
+      - name: Generate job name with timestamp
+        id: job-name
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          JOB_NAME="preprocessing-job-${TIMESTAMP}"
+          echo "job_name=$JOB_NAME" >> $GITHUB_OUTPUT
+
+      - name: Update SageMaker Processing Job configuration
+        id: job-config
+        env:
+          IMAGE_URI: ${{ steps.get-image.outputs.image_uri }}
+          JOB_NAME: ${{ steps.job-name.outputs.job_name }}
+          INPUT_PATH: ${{ github.event.inputs.input_data_path || format('s3://{0}-raw-data-bucket/input/', env.APP_PREFIX) }}
+          OUTPUT_PATH: ${{ github.event.inputs.output_data_path || format('s3://{0}-processed-data-bucket/output/', env.APP_PREFIX) }}
+          SCRIPT_PATH: s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing.py
+        run: |
+          # Replace placeholders in the job config template
+          sed -e "s|{{JOB_NAME}}|$JOB_NAME|g" \
+              -e "s|{{IMAGE_URI}}|$IMAGE_URI|g" \
+              -e "s|{{INPUT_PATH}}|$INPUT_PATH|g" \
+              -e "s|{{OUTPUT_PATH}}|$OUTPUT_PATH|g" \
+              -e "s|{{SCRIPT_PATH}}|$SCRIPT_PATH|g" \
+              -e "s|{{INSTANCE_COUNT}}|$PROCESSING_INSTANCE_COUNT|g" \
+              -e "s|{{INSTANCE_TYPE}}|$PROCESSING_INSTANCE_TYPE|g" \
+              -e "s|{{ROLE_ARN}}|arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.APP_PREFIX }}-data-preprocessing-role|g" \
+              preprocessing/job-config.json > job-config-final.json
+          
+          echo "Final job configuration:"
+          cat job-config-final.json
+
+      - name: Start SageMaker Processing Job
+        env:
+          JOB_NAME: ${{ steps.job-name.outputs.job_name }}
+        run: |
+          aws sagemaker create-processing-job --cli-input-json file://job-config-final.json
+          echo "SageMaker processing job started: $JOB_NAME"
+
+      - name: Wait for SageMaker Processing Job to complete
+        env:
+          JOB_NAME: ${{ steps.job-name.outputs.job_name }}
+        run: |
+          echo "Waiting for processing job to complete..."
+          aws sagemaker wait processing-job-completed-or-stopped --processing-job-name $JOB_NAME
+          
+          # Check final status
+          STATUS=$(aws sagemaker describe-processing-job --processing-job-name $JOB_NAME --query 'ProcessingJobStatus' --output text)
+          echo "Job completed with status: $STATUS"
+          
+          if [ "$STATUS" != "Completed" ]; then
+            echo "Processing job failed or was stopped"
+            FAILURE_REASON=$(aws sagemaker describe-processing-job --processing-job-name $JOB_NAME --query 'FailureReason' --output text)
+            echo "Failure reason: $FAILURE_REASON"
+            exit 1
+          fi
+
+      - name: Output job details
+        if: always()
+        env:
+          JOB_NAME: ${{ steps.job-name.outputs.job_name }}
+        run: |
+          echo "Job Name: $JOB_NAME"
+          echo "Job ARN: $(aws sagemaker describe-processing-job --processing-job-name $JOB_NAME --query 'ProcessingJobArn' --output text)"
+          echo "Check CloudWatch logs at: https://console.aws.amazon.com/cloudwatch/home?region=${{ env.AWS_REGION }}#logsV2:log-groups/log-group//aws/sagemaker/ProcessingJobs"
