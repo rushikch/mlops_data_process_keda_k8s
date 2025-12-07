@@ -75,14 +75,25 @@ class DataPreprocessingPipelineStack(Stack):
             self,
             f"{app_prefix}-data-preprocessing-role",
             role_name=f"{app_prefix}-data-preprocessing-role",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal("sagemaker.amazonaws.com"),
             managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole"),
                 iam.ManagedPolicy.from_aws_managed_policy_name("AmazonS3FullAccess"),
                 iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSageMakerFullAccess"),
                 iam.ManagedPolicy.from_aws_managed_policy_name("CloudWatchLogsFullAccess"),
-                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEC2ContainerRegistryFullAccess"),
             ],
+        )
+
+        # Add inline policy for S3 bucket access
+        self.data_preprocessing_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+                resources=[
+                    f"{self.raw_data_bucket.bucket_arn}/*",
+                    f"{self.processed_data_bucket.bucket_arn}/*",
+                    f"{self.model_artifacts_bucket.bucket_arn}/*",
+                    f"{self.logs_bucket.bucket_arn}/*",
+                ],
+            )
         )
     
     def __create_data_preprocessing_pipeline(self, app_prefix: str) -> None:
@@ -99,8 +110,7 @@ class DataPreprocessingPipelineStack(Stack):
             
             # App Specification - using SKLearn container
             app_specification=sagemaker.CfnProcessingJob.AppSpecificationProperty(
-                image_uri=f"683313688378.dkr.ecr.{self.region}.amazonaws.com/sagemaker-scikit-learn:1.2-1-cpu-py3",
-                container_entrypoint=["python3", "/opt/ml/processing/input/code/preprocessing.py"]
+                image_uri=f"246618743249.dkr.ecr.{self.region}.amazonaws.com/sagemaker-scikit-learn:1.0-1-cpu-py3",
             ),
             
             # Processing Inputs
@@ -113,7 +123,6 @@ class DataPreprocessingPipelineStack(Stack):
                         s3_data_type="S3Prefix",
                         local_path="/opt/ml/processing/input/data",
                         s3_input_mode="File",
-                        s3_data_distribution_type="FullyReplicated"
                     )
                 ),
                 # Input 2: Preprocessing code from processed-data bucket
@@ -123,7 +132,7 @@ class DataPreprocessingPipelineStack(Stack):
                         s3_uri=f"s3://{self.processed_data_bucket.bucket_name}/code/preprocessing.py",
                         s3_data_type="S3Prefix",
                         local_path="/opt/ml/processing/input/code",
-                        s3_input_mode="File"
+                        s3_input_mode="File",
                     )
                 )
             ],
@@ -169,16 +178,6 @@ class DataPreprocessingPipelineStack(Stack):
                     volume_size_in_gb=30
                 )
             ),
-            
-            # Network Configuration
-            # network_config=sagemaker.CfnProcessingJob.NetworkConfigProperty(
-            #     enable_inter_container_traffic_encryption=False,
-            #     enable_network_isolation=False,
-            #     vpc_config=sagemaker.CfnProcessingJob.VpcConfigProperty(
-            #         subnets=[subnet.ref for subnet in self.private_subnets],
-            #         security_group_ids=[self.sagemaker_sg.security_group_id]
-            #     )
-            # ),
             
             # Stopping Condition
             stopping_condition=sagemaker.CfnProcessingJob.StoppingConditionProperty(
