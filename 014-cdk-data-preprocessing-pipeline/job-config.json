@@ -45,7 +45,7 @@
     "ImageUri": "{{IMAGE_URI}}",
     "ContainerEntrypoint": [
       "python3",
-      "/opt/ml/processing/input/code/preprocessing.py"
+      "/opt/ml/processing/input/code/preprocessing_script.py"
     ]
   },
   "RoleArn": "{{ROLE_ARN}}",
