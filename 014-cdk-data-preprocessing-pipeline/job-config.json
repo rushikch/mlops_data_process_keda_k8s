@@ -36,7 +36,7 @@
   },
   "ProcessingResources": {
     "ClusterConfig": {
-      "InstanceCount": "{{INSTANCE_COUNT}}",
+      "InstanceCount": {{INSTANCE_COUNT}},
       "InstanceType": "{{INSTANCE_TYPE}}",
       "VolumeSizeInGB": 30
     }
