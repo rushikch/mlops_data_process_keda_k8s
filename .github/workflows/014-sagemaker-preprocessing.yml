@@ -57,31 +57,18 @@ jobs:
       - name: Get SageMaker scikit-learn image URI
         id: get-image
         run: |
-          python << 'EOF'
-          import os
-          import sagemaker
+          # SageMaker sklearn image URI pattern for us-east-1
+          # Format: {account}.dkr.ecr.{region}.amazonaws.com/sagemaker-scikit-learn:{version}-cpu-py3
+          ACCOUNT_ID="683313688378"  # SageMaker account for us-east-1
+          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/sagemaker-scikit-learn:${{ env.SKLEARN_VERSION }}-cpu-py3"
           
-          # Get the image URI for scikit-learn
-          image_uri = sagemaker.image_uris.retrieve(
-              framework='sklearn',
-              region=os.environ['AWS_REGION'],
-              version=os.environ['SKLEARN_VERSION'],
-              image_scope='training'
-          )
-          
-          print(f"Using SageMaker image: {image_uri}")
-          
-          # Write to GITHUB_OUTPUT
-          github_output = os.environ.get('GITHUB_OUTPUT')
-          if github_output:
-              with open(github_output, 'a') as f:
-                  f.write(f"image_uri={image_uri}\n")
-          EOF
+          echo "Using SageMaker image: ${IMAGE_URI}"
+          echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
 
-      - name: Upload preprocessing script to S3
-        run: |
-          aws s3 cp preprocessing/preprocessing.py \
-            s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing.py
+      # - name: Upload preprocessing script to S3
+      #   run: |
+      #     aws s3 cp preprocessing/preprocessing.py \
+      #       s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing.py
 
       - name: Generate job name with timestamp
         id: job-name
