@@ -84,7 +84,7 @@ jobs:
           JOB_NAME: ${{ steps.job-name.outputs.job_name }}
           INPUT_PATH: ${{ github.event.inputs.input_data_path || format('s3://{0}-raw-data-bucket/input/', env.APP_PREFIX) }}
           OUTPUT_PATH: ${{ github.event.inputs.output_data_path || format('s3://{0}-processed-data-bucket/output/', env.APP_PREFIX) }}
-          SCRIPT_PATH: s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing.py
+          SCRIPT_PATH: s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing_script.py
         run: |
           # Replace placeholders in the job config template
           sed -e "s|{{JOB_NAME}}|$JOB_NAME|g" \
