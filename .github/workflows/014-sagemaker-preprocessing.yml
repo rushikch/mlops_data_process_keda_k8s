@@ -57,22 +57,25 @@ jobs:
       - name: Get SageMaker scikit-learn image URI
         id: get-image
         run: |
-          python << EOF
-          import boto3
-          from sagemaker import image_uris
+          python << 'EOF'
+          import os
+          import sagemaker
           
-          image_uri = image_uris.retrieve(
+          # Get the image URI for scikit-learn
+          image_uri = sagemaker.image_uris.retrieve(
               framework='sklearn',
-              region='${{ env.AWS_REGION }}',
-              version='${{ env.SKLEARN_VERSION }}',
-              image_scope='training'  # Can use 'training' images for processing jobs
+              region=os.environ['AWS_REGION'],
+              version=os.environ['SKLEARN_VERSION'],
+              image_scope='training'
           )
           
           print(f"Using SageMaker image: {image_uri}")
           
           # Write to GITHUB_OUTPUT
-          with open('$GITHUB_OUTPUT', 'a') as f:
-              f.write(f"image_uri={image_uri}\n")
+          github_output = os.environ.get('GITHUB_OUTPUT')
+          if github_output:
+              with open(github_output, 'a') as f:
+                  f.write(f"image_uri={image_uri}\n")
           EOF
 
       - name: Upload preprocessing script to S3
