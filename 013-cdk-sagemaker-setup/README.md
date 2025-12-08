@@ -1,12 +1,12 @@
 # 🚀 Hands-On Guide: AWS SageMaker Environment Setup with CDK
 
-## 📋 Overview
+## Overview
 
 This guide walks you through setting up a complete AWS SageMaker environment using AWS CDK (Cloud Development Kit) with Python. You'll create a production-ready infrastructure including VPC, IAM roles, SageMaker Domain, User Profile, and Notebook Instance.
 
 ![MLOPS SageMaker Setup](./img/mlops-sagemaker-cdk-01.png)
 
-## 🎯 What You'll Build
+## What You'll Build
 
 - **Custom VPC** with public and private subnets across 2 availability zones
 - **IAM Roles** with appropriate permissions for SageMaker
@@ -14,7 +14,7 @@ This guide walks you through setting up a complete AWS SageMaker environment usi
 - **SageMaker User Profile** for team collaboration
 - **SageMaker Notebook Instance** for development
 
-## 📦 Prerequisites
+## Prerequisites
 
 - AWS Account with appropriate permissions
 - AWS CLI configured
@@ -22,7 +22,7 @@ This guide walks you through setting up a complete AWS SageMaker environment usi
 - Node.js 14.x or higher (for CDK)
 - Basic understanding of AWS services
 
-## 🛠️ Step 1: Clone Repository and Setup
+## Step 1: Clone Repository and Setup
 
 ### Clone the MLOps Repository
 
@@ -43,7 +43,7 @@ npm install -g aws-cdk
 cdk --version
 ```
 
-## 📝 Step 2: Setup Python Environment
+## Step 2: Setup Python Environment
 
 ### Create Python Virtual Environment
 
@@ -60,7 +60,7 @@ The `requirements.txt` file is already provided in the repository:
 pip install -r requirements.txt
 ```
 
-## 🏗️ Step 3: Review CDK Stack
+## Step 3: Review CDK Stack
 
 The CDK stack is already implemented in the repository. Let's review the key components:
 
@@ -81,7 +81,7 @@ The `app.py` file defines:
 
 You can review these files in your cloned repository.
 
-## 🌐 Step 4: Network Configuration
+## Step 4: Network Configuration
 
 The stack creates:
 
@@ -97,7 +97,7 @@ The stack creates:
 - Multi-AZ deployment for high availability
 - Isolated private subnets for SageMaker resources
 
-## 🔐 Step 5: IAM Roles Configuration
+## Step 5: IAM Roles Configuration
 
 Three IAM roles are created:
 
@@ -123,7 +123,7 @@ Role Name: {app_prefix}-sagemaker-notebook-role
 Permissions: Same as Domain Role
 ```
 
-## 🎨 Step 6: SageMaker Resources
+## Step 6: SageMaker Resources
 
 ### SageMaker Domain
 - **Auth Mode**: IAM
@@ -142,7 +142,7 @@ Permissions: Same as Domain Role
 - **Root Access**: Enabled
 - **Volume Size**: 10 GB
 
-## 🚀 Step 7: Deploy the Stack
+## Step 7: Deploy the Stack
 
 ### Bootstrap CDK (First Time Only)
 
@@ -170,7 +170,7 @@ cdk deploy
 
 **Note**: Deployment takes approximately 10-15 minutes.
 
-## ✅ Step 8: Verify Deployment
+## Step 8: Verify Deployment
 
 ### Check SageMaker Domain
 
@@ -204,7 +204,7 @@ aws sagemaker list-notebook-instances
 3. Find your instance
 4. Click "Open JupyterLab" or "Open Jupyter"
 
-## 💰 Step 9: Cost Optimization
+## Step 9: Cost Optimization
 
 ### Resources and Costs
 
@@ -228,7 +228,7 @@ aws sagemaker stop-notebook-instance --notebook-instance-name <name>
 
 4. **Set Budget Alerts** in AWS Budgets
 
-## 🧹 Step 10: Cleanup
+## Step 10: Cleanup
 
 ### Destroy Stack
 
@@ -286,14 +286,14 @@ aws sts get-caller-identity
 - IAM role permissions
 - CloudWatch logs for errors
 
-## 📚 Additional Resources
+## Additional Resources
 
 - [AWS CDK Documentation](https://docs.aws.amazon.com/cdk/)
 - [AWS SageMaker Documentation](https://docs.aws.amazon.com/sagemaker/)
 - [SageMaker Studio User Guide](https://docs.aws.amazon.com/sagemaker/latest/dg/studio.html)
 - [SageMaker Pricing](https://aws.amazon.com/sagemaker/pricing/)
 
-## 🎓 Key Learnings
+## Key Learnings
 
 1. **Infrastructure as Code**: CDK allows version-controlled, repeatable infrastructure
 2. **Network Isolation**: Private subnets provide security for ML workloads
@@ -301,7 +301,7 @@ aws sts get-caller-identity
 4. **Multi-AZ Deployment**: High availability for production workloads
 5. **Cost Management**: Understanding resource costs and optimization strategies
 
-## 🔄 Next Steps
+## Next Steps
 
 1. **Customize Network**: Adjust CIDR blocks and subnet configurations
 2. **Add NAT Gateway**: Enable private subnet internet access (commented in code)
@@ -309,7 +309,7 @@ aws sts get-caller-identity
 4. **Add Monitoring**: CloudWatch dashboards and alarms
 5. **Integrate with CI/CD**: Automate deployments with GitHub Actions
 
-## 📝 Notes
+## Notes
 
 - The NAT Gateway is commented out to reduce costs. Uncomment if private subnets need internet access.
 - Security groups allow all traffic for demonstration. Restrict in production.

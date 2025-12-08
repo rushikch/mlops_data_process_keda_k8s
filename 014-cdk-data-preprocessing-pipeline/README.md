@@ -1,10 +1,10 @@
 # 🚀 Hands-On Guide: SageMaker Data Preprocessing Pipeline with CDK & GitHub Actions
 
-## 📋 Overview
+## Overview
 
 This guide demonstrates building an automated data preprocessing pipeline using AWS SageMaker Processing Jobs, AWS CDK for infrastructure, and GitHub Actions for CI/CD. You'll learn to process raw data, perform transformations, and automate the entire workflow.
 
-## 🎯 What You'll Build
+## What You'll Build
 
 - **S3 Buckets** for raw data, processed data, model artifacts, and logs
 - **IAM Roles** with fine-grained permissions for data processing
@@ -12,7 +12,7 @@ This guide demonstrates building an automated data preprocessing pipeline using 
 - **GitHub Actions Workflow** for automated pipeline execution
 - **Data Preprocessing Script** with cleaning and feature engineering
 
-## 📦 Prerequisites
+## Prerequisites
 
 - AWS Account with SageMaker access
 - GitHub Account
@@ -21,10 +21,10 @@ This guide demonstrates building an automated data preprocessing pipeline using 
 - Basic understanding of pandas and data processing
 - Completed [013-cdk-sagemaker-setup](../013-cdk-sagemaker-setup) (optional but recommended)
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 ![Architecture Diagram](./img/12-mlops-preprocessing-pipeine.png)
 
-## 🛠️ Step 1: Clone Repository and Setup
+## Step 1: Clone Repository and Setup
 
 ### Clone the MLOps Repository
 
@@ -48,7 +48,7 @@ The `requirements.txt` file is already provided in the repository:
 pip install -r requirements.txt
 ```
 
-## 📝 Step 2: Review CDK Infrastructure
+## Step 2: Review CDK Infrastructure
 
 The CDK infrastructure is already implemented in the repository.
 
@@ -129,7 +129,7 @@ DataPreprocessingPipelineStack(app, "DataPreprocessingPipelineStack")
 app.synth()
 ```
 
-## 🚀 Step 3: Deploy Infrastructure
+## Step 3: Deploy Infrastructure
 
 ### Bootstrap CDK
 
@@ -147,7 +147,7 @@ This creates:
 - 4 S3 buckets
 - IAM role with appropriate permissions
 
-## 📊 Step 4: Review Preprocessing Script
+## Step 4: Review Preprocessing Script
 
 The preprocessing script is already provided in `data/preprocessing_script.py`:
 
@@ -225,7 +225,7 @@ department_stats.to_csv(
 print("✅ Department statistics saved")
 ```
 
-## 📤 Step 5: Upload Data and Script to S3
+## Step 5: Upload Data and Script to S3
 
 ### Upload Mock Data
 
@@ -241,7 +241,7 @@ aws s3 cp data/preprocessing_script.py \
   s3://mlops-data-preprocessing-pipeline-model-artifacts-bucket/scripts/
 ```
 
-## ⚙️ Step 6: Review Job Configuration
+## Step 6: Review Job Configuration
 
 The job configuration template is already provided in `job-config.json`:
 
@@ -301,7 +301,7 @@ The job configuration template is already provided in `job-config.json`:
 }
 ```
 
-## 🔄 Step 7: Review GitHub Actions Workflow
+## Step 7: Review GitHub Actions Workflow
 
 The GitHub Actions workflow is already configured in `.github/workflows/014-sagemaker-preprocessing.yml`:
 
@@ -426,7 +426,7 @@ Add secrets:
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_ACCOUNT_ID`
 
-## 🎬 Step 8: Run the Pipeline
+## Step 8: Run the Pipeline
 
 ### Manual Trigger
 
@@ -442,7 +442,7 @@ Push changes to:
 - `preprocessing/**` directory
 - `.github/workflows/014-sagemaker-preprocessing.yml`
 
-## 📊 Step 9: Monitor and Verify
+## Step 9: Monitor and Verify
 
 ### Check Job Status
 
@@ -470,7 +470,7 @@ aws s3 ls s3://mlops-data-preprocessing-pipeline-processed-data-bucket/output/
 aws s3 cp s3://mlops-data-preprocessing-pipeline-processed-data-bucket/output/transformed_data.csv ./
 ```
 
-## 📈 Step 10: Understand the Data Processing
+## Step 10: Understand the Data Processing
 
 ### Input Data Structure
 
@@ -504,7 +504,7 @@ id,name,age,salary,hire_date,profile,department,bonus
 2. **transformed_data.csv**: Data with engineered features
 3. **department_statistics.csv**: Aggregated department metrics
 
-## 💰 Step 11: Cost Analysis
+## Step 11: Cost Analysis
 
 ### Resource Costs
 
@@ -530,7 +530,7 @@ For a 10-minute processing job:
 4. Use S3 Intelligent-Tiering
 5. Monitor with AWS Cost Explorer
 
-## 🧹 Step 12: Cleanup
+## Step 12: Cleanup
 
 ### Delete S3 Buckets
 
@@ -578,7 +578,7 @@ aws s3 ls s3://mlops-data-preprocessing-pipeline-raw-data-bucket/input/
 aws s3 ls s3://mlops-data-preprocessing-pipeline-model-artifacts-bucket/scripts/
 ```
 
-## 📚 Best Practices
+## Best Practices
 
 1. **Version Control**: Keep preprocessing scripts in Git
 2. **Data Validation**: Add data quality checks
@@ -589,7 +589,7 @@ aws s3 ls s3://mlops-data-preprocessing-pipeline-model-artifacts-bucket/scripts/
 7. **Documentation**: Document data transformations
 8. **Security**: Use IAM roles, not access keys
 
-## 🎓 Key Learnings
+## Key Learnings
 
 1. **SageMaker Processing Jobs**: Scalable data preprocessing
 2. **Infrastructure as Code**: CDK for reproducible infrastructure
@@ -598,7 +598,7 @@ aws s3 ls s3://mlops-data-preprocessing-pipeline-model-artifacts-bucket/scripts/
 5. **IAM Security**: Least privilege access
 6. **Cost Optimization**: Understanding and managing costs
 
-## 🔄 Next Steps
+## Next Steps
 
 1. **Add Data Validation**: Implement Great Expectations
 2. **Parallel Processing**: Use multiple instances
@@ -608,7 +608,7 @@ aws s3 ls s3://mlops-data-preprocessing-pipeline-model-artifacts-bucket/scripts/
 6. **Notifications**: SNS alerts for job completion
 7. **Scheduling**: Add EventBridge for scheduled runs
 
-## 📖 Additional Resources
+## Additional Resources
 
 - [SageMaker Processing Jobs](https://docs.aws.amazon.com/sagemaker/latest/dg/processing-job.html)
 - [SageMaker Python SDK](https://sagemaker.readthedocs.io/)
