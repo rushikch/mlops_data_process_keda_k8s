@@ -95,7 +95,7 @@ jobs:
               -e "s|{{INSTANCE_COUNT}}|$PROCESSING_INSTANCE_COUNT|g" \
               -e "s|{{INSTANCE_TYPE}}|$PROCESSING_INSTANCE_TYPE|g" \
               -e "s|{{ROLE_ARN}}|arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.APP_PREFIX }}-data-preprocessing-role|g" \
-              preprocessing/job-config.json > job-config-final.json
+              014-cdk-data-preprocessing-pipeline/job-config.json > job-config-final.json
           
           echo "Final job configuration:"
           cat job-config-final.json
