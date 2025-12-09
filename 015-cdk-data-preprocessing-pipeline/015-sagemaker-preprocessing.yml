@@ -1,4 +1,4 @@
-name: SageMaker Preprocessing Job
+name: SageMaker Preprocessing Job v2
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ on:
       - main
     paths:
       - 'preprocessing/**'
-      - '.github/workflows/014-sagemaker-preprocessing.yml'
+      - '.github/workflows/015-sagemaker-preprocessing.yml'
 
 env:
   AWS_REGION: us-east-1  # Change to your region
@@ -103,7 +103,7 @@ jobs:
               -e "s|{{INSTANCE_COUNT}}|$PROCESSING_INSTANCE_COUNT|g" \
               -e "s|{{INSTANCE_TYPE}}|$PROCESSING_INSTANCE_TYPE|g" \
               -e "s|{{ROLE_ARN}}|arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.APP_PREFIX }}-data-preprocessing-role|g" \
-              014-cdk-data-preprocessing-pipeline/job-config.json > job-config-final.json
+              015-cdk-data-preprocessing-pipeline/job-config.json > job-config-final.json
           
           echo "Final job configuration:"
           cat job-config-final.json

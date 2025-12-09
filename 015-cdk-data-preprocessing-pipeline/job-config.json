@@ -31,6 +31,14 @@
           "LocalPath": "/opt/ml/processing/output",
           "S3UploadMode": "EndOfJob"
         }
+      },
+      {
+        "OutputName": "logs",
+        "S3Output": {
+          "S3Uri": "{{LOGS_PATH}}",
+          "LocalPath": "/opt/ml/processing/logs",
+          "S3UploadMode": "Continuous"
+        }
       }
     ]
   },
@@ -49,33 +57,9 @@
     ]
   },
   "RoleArn": "{{ROLE_ARN}}",
-  "ProcessingOutputConfig": {
-    "Outputs": [
-      {
-        "OutputName": "output-data",
-        "S3Output": {
-          "S3Uri": "{{OUTPUT_PATH}}",
-          "LocalPath": "/opt/ml/processing/output",
-          "S3UploadMode": "EndOfJob"
-        }
-      },
-      {
-        "OutputName": "logs",
-        "S3Output": {
-          "S3Uri": "{{LOGS_PATH}}",
-          "LocalPath": "/opt/ml/processing/logs",
-          "S3UploadMode": "Continuous"
-        }
-      }
-    ],
-    "KmsKeyId": ""
-  },
   "StoppingCondition": {
     "MaxRuntimeInSeconds": 3600
   },
-  "EnableNetworkIsolation": false,
-  "EnableInterContainerTrafficEncryption": false,
-  "EnableManagedSpotTraining": false,
   "Environment": {
     "LOG_LEVEL": "INFO"
   },
