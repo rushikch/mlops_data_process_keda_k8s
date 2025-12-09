@@ -45,6 +45,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Verify AWS credentials
+        run: |
+          echo "Testing AWS credentials..."
+          aws sts get-caller-identity
+          echo "AWS credentials are working!"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -84,13 +90,15 @@ jobs:
           JOB_NAME: ${{ steps.job-name.outputs.job_name }}
           INPUT_PATH: ${{ github.event.inputs.input_data_path || format('s3://{0}-raw-data-bucket/input/', env.APP_PREFIX) }}
           OUTPUT_PATH: ${{ github.event.inputs.output_data_path || format('s3://{0}-processed-data-bucket/output/', env.APP_PREFIX) }}
-          SCRIPT_PATH: s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing_script.py
+          LOGS_PATH: s3://${{ env.APP_PREFIX }}-logs-bucket/processing-jobs/${{ steps.job-name.outputs.job_name }}/
+          SCRIPT_PATH: s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing.py
         run: |
           # Replace placeholders in the job config template
           sed -e "s|{{JOB_NAME}}|$JOB_NAME|g" \
               -e "s|{{IMAGE_URI}}|$IMAGE_URI|g" \
               -e "s|{{INPUT_PATH}}|$INPUT_PATH|g" \
               -e "s|{{OUTPUT_PATH}}|$OUTPUT_PATH|g" \
+              -e "s|{{LOGS_PATH}}|$LOGS_PATH|g" \
               -e "s|{{SCRIPT_PATH}}|$SCRIPT_PATH|g" \
               -e "s|{{INSTANCE_COUNT}}|$PROCESSING_INSTANCE_COUNT|g" \
               -e "s|{{INSTANCE_TYPE}}|$PROCESSING_INSTANCE_TYPE|g" \
@@ -132,4 +140,10 @@ jobs:
         run: |
           echo "Job Name: $JOB_NAME"
           echo "Job ARN: $(aws sagemaker describe-processing-job --processing-job-name $JOB_NAME --query 'ProcessingJobArn' --output text)"
-          echo "Check CloudWatch logs at: https://console.aws.amazon.com/cloudwatch/home?region=${{ env.AWS_REGION }}#logsV2:log-groups/log-group//aws/sagemaker/ProcessingJobs"
+          echo ""
+          echo "=== Logs Location ==="
+          echo "S3 Logs: s3://${{ env.APP_PREFIX }}-logs-bucket/processing-jobs/${JOB_NAME}/"
+          echo "CloudWatch Logs: https://console.aws.amazon.com/cloudwatch/home?region=${{ env.AWS_REGION }}#logsV2:log-groups/log-group//aws/sagemaker/ProcessingJobs"
+          echo ""
+          echo "To view S3 logs, run:"
+          echo "  aws s3 ls s3://${{ env.APP_PREFIX }}-logs-bucket/processing-jobs/${JOB_NAME}/ --recursive"
