@@ -4,13 +4,32 @@ import os
 import json
 import numpy as np
 from datetime import datetime
+import logging
+
+# Setup logging to write to both console and file
+log_dir = '/opt/ml/processing/logs'
+os.makedirs(log_dir, exist_ok=True)
+
+log_file = os.path.join(log_dir, 'preprocessing.log')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Load dataset
 try:
     df = pd.read_csv('/opt/ml/processing/input/mock_data.csv')
+    logger.info(f"✅ Dataset loaded successfully!")
+    logger.info(f"📏 Dataset shape: {df.shape}")
     print(f"✅ Dataset loaded successfully!")
     print(f"📏 Dataset shape: {df.shape}")
 except FileNotFoundError:
+    logger.error("❌ Error: mock_data.csv not found")
     print("❌ Error: mock_data.csv not found. Please run create_dataset.py first.")
     exit()
 
@@ -199,3 +218,12 @@ print("\nTransformed data csv saved to: '/opt/ml/processing/output/transformed_d
 print("Saving department statistics...")
 department_summary_report.to_csv("/opt/ml/processing/output/department_statistics.csv", index=False)
 print("✅ Department statistics saved to: '/opt/ml/processing/output/department_statistics.csv'")
+
+# Write final summary to log file
+logger.info("=" * 50)
+logger.info("PROCESSING JOB COMPLETED SUCCESSFULLY")
+logger.info("=" * 50)
+logger.info(f"Total rows processed: {len(transform_df)}")
+logger.info(f"Output files created: 3")
+logger.info(f"Log file location: {log_file}")
+logger.info("=" * 50)
