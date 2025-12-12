@@ -99,13 +99,49 @@ class DataPreprocessingPipelineStack(Stack):
         # Add inline policy for S3 bucket access
         self.data_preprocessing_role.add_to_policy(
             iam.PolicyStatement(
-                actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+                actions=["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
                 resources=[
                     f"{self.raw_data_bucket.bucket_arn}/*",
                     f"{self.processed_data_bucket.bucket_arn}/*",
                     f"{self.model_artifacts_bucket.bucket_arn}/*",
                     f"{self.logs_bucket.bucket_arn}/*",
+                    f"{self.feature_store_bucket.bucket_arn}/*",
+                    self.raw_data_bucket.bucket_arn,
+                    self.processed_data_bucket.bucket_arn,
+                    self.model_artifacts_bucket.bucket_arn,
+                    self.logs_bucket.bucket_arn,
+                    self.feature_store_bucket.bucket_arn,
                 ],
+            )
+        )
+
+        # Add Feature Store permissions
+        self.data_preprocessing_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "sagemaker:PutRecord",
+                    "sagemaker:GetRecord",
+                    "sagemaker:DeleteRecord",
+                    "sagemaker:DescribeFeatureGroup",
+                    "sagemaker:DescribeFeatureMetadata",
+                    "sagemaker:BatchGetRecord",
+                ],
+                resources=["*"],
+            )
+        )
+
+        # Add Glue permissions for Feature Store offline store
+        self.data_preprocessing_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "glue:CreateTable",
+                    "glue:GetTable",
+                    "glue:UpdateTable",
+                    "glue:DeleteTable",
+                    "glue:GetDatabase",
+                    "glue:CreateDatabase",
+                ],
+                resources=["*"],
             )
         )
     
@@ -120,41 +156,68 @@ class DataPreprocessingPipelineStack(Stack):
     
     def __create_feature_store(self, app_prefix: str) -> None:
         """
-        Create SageMaker Feature Store with Feature Groups.
+        Create SageMaker Feature Store with Feature Groups based on the employee dataset.
         :param app_prefix: Prefix for naming resources.
         """
 
-        # Define feature definitions for your features
-        # Adjust these based on your actual features
+        # Define feature definitions based on transformed_data.csv columns
         feature_definitions = [
+            # Record identifier - unique ID for each employee
             sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
-                feature_name="feature_id",
+                feature_name="employee_id",
                 feature_type="String"
             ),
+            # Event time - required for feature store
             sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
                 feature_name="event_time",
                 feature_type="String"
             ),
+            # Original features from cleaned data
             sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
-                feature_name="feature_1",
+                feature_name="age",
                 feature_type="Fractional"
             ),
             sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
-                feature_name="feature_2",
+                feature_name="salary",
+                feature_type="Fractional"
+            ),
+            sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
+                feature_name="department",
+                feature_type="String"
+            ),
+            sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
+                feature_name="address",
+                feature_type="String"
+            ),
+            sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
+                feature_name="phone",
+                feature_type="String"
+            ),
+            sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
+                feature_name="email",
+                feature_type="String"
+            ),
+            # Engineered features
+            sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
+                feature_name="address_length",
                 feature_type="Integral"
             ),
             sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
-                feature_name="feature_3",
+                feature_name="salary_category",
+                feature_type="String"
+            ),
+            sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
+                feature_name="age_group",
                 feature_type="String"
             ),
         ]
 
-        # Create Feature Group
+        # Create Feature Group for employee features
         self.feature_group = sagemaker.CfnFeatureGroup(
             self,
-            f"{app_prefix}-feature-group",
-            feature_group_name=f"{app_prefix}-feature-group",
-            record_identifier_feature_name="feature_id",
+            f"{app_prefix}-employee-feature-group",
+            feature_group_name=f"{app_prefix}-employee-features",
+            record_identifier_feature_name="employee_id",
             event_time_feature_name="event_time",
             feature_definitions=feature_definitions,
             # Enable online store for real-time inference
@@ -165,8 +228,9 @@ class DataPreprocessingPipelineStack(Stack):
             offline_store_config={
                 "S3StorageConfig": {
                     "S3Uri": f"s3://{self.feature_store_bucket.bucket_name}/offline-store"
-                }
+                },
+                "DisableGlueTableCreation": False
             },
             role_arn=self.data_preprocessing_role.role_arn,
-            description="Feature group for ML pipeline features",
+            description="Feature group for employee data with engineered features",
         )

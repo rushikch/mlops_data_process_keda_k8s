@@ -5,6 +5,10 @@ import json
 import numpy as np
 from datetime import datetime
 import logging
+import boto3
+from sagemaker.feature_store.feature_group import FeatureGroup
+import sagemaker
+import time
 
 # Setup logging to write to both console and file
 log_dir = '/opt/ml/processing/logs'
@@ -20,6 +24,11 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Initialize SageMaker session and Feature Store client
+sagemaker_session = sagemaker.Session()
+region = sagemaker_session.boto_region_name
+logger.info(f"Initialized SageMaker session in region: {region}")
 
 # Load dataset
 try:
@@ -219,11 +228,154 @@ print("Saving department statistics...")
 department_summary_report.to_csv("/opt/ml/processing/output/department_statistics.csv", index=False)
 print("✅ Department statistics saved to: '/opt/ml/processing/output/department_statistics.csv'")
 
+# ==================== FEATURE STORE INGESTION ====================
+print("\n" + "="*60)
+print("🏪 STARTING FEATURE STORE INGESTION")
+print("="*60)
+
+try:
+    # Prepare data for Feature Store
+    feature_store_df = transform_df.copy()
+    
+    # Add required columns for Feature Store
+    # 1. employee_id - unique identifier (using index)
+    feature_store_df['employee_id'] = feature_store_df.index.astype(str)
+    
+    # 2. event_time - timestamp in ISO format (required by Feature Store)
+    current_time = datetime.now()
+    feature_store_df['event_time'] = current_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+    
+    # Convert categorical columns to string
+    feature_store_df['salary_category'] = feature_store_df['salary_category'].astype(str)
+    feature_store_df['age_group'] = feature_store_df['age_group'].astype(str)
+    feature_store_df['department'] = feature_store_df['department'].astype(str)
+    feature_store_df['address'] = feature_store_df['address'].astype(str)
+    feature_store_df['phone'] = feature_store_df['phone'].astype(str)
+    feature_store_df['email'] = feature_store_df['email'].astype(str)
+    
+    # Ensure numeric columns are float
+    feature_store_df['age'] = feature_store_df['age'].astype(float)
+    feature_store_df['salary'] = feature_store_df['salary'].astype(float)
+    
+    # Ensure address_length is integer
+    feature_store_df['address_length'] = feature_store_df['address_length'].astype(int)
+    
+    # Select only the columns that match the feature store schema
+    feature_columns = [
+        'employee_id',
+        'event_time',
+        'age',
+        'salary',
+        'department',
+        'address',
+        'phone',
+        'email',
+        'address_length',
+        'salary_category',
+        'age_group'
+    ]
+    
+    feature_store_df = feature_store_df[feature_columns]
+    
+    print(f"\n📋 Feature Store DataFrame Info:")
+    print(f"Shape: {feature_store_df.shape}")
+    print(f"Columns: {feature_store_df.columns.tolist()}")
+    print(f"\nFirst few rows:")
+    print(feature_store_df.head())
+    print(f"\nData types:")
+    print(feature_store_df.dtypes)
+    
+    # Get Feature Group name from environment variable or use default
+    feature_group_name = os.environ.get(
+        'FEATURE_GROUP_NAME', 
+        'mlops-data-preprocessing-pipeline-employee-features'
+    )
+    
+    logger.info(f"Connecting to Feature Group: {feature_group_name}")
+    print(f"\n🔗 Connecting to Feature Group: {feature_group_name}")
+    
+    # Initialize Feature Group
+    feature_group = FeatureGroup(
+        name=feature_group_name,
+        sagemaker_session=sagemaker_session
+    )
+    
+    # Wait for feature group to be created (if it's being created concurrently)
+    print(f"\n⏳ Waiting for Feature Group to be available...")
+    max_retries = 30
+    retry_count = 0
+    
+    while retry_count < max_retries:
+        try:
+            status = feature_group.describe()['FeatureGroupStatus']
+            logger.info(f"Feature Group status: {status}")
+            
+            if status == 'Created':
+                print(f"✅ Feature Group is ready!")
+                break
+            elif status == 'Creating':
+                print(f"⏳ Feature Group is still being created... (attempt {retry_count + 1}/{max_retries})")
+                time.sleep(30)
+                retry_count += 1
+            else:
+                logger.warning(f"Unexpected Feature Group status: {status}")
+                time.sleep(30)
+                retry_count += 1
+        except Exception as e:
+            logger.warning(f"Error checking Feature Group status (attempt {retry_count + 1}/{max_retries}): {str(e)}")
+            time.sleep(30)
+            retry_count += 1
+    
+    if retry_count >= max_retries:
+        raise Exception("Feature Group did not become available within the expected time")
+    
+    # Ingest data into Feature Store
+    print(f"\n📤 Ingesting {len(feature_store_df)} records into Feature Store...")
+    logger.info(f"Starting ingestion of {len(feature_store_df)} records")
+    
+    feature_group.ingest(
+        data_frame=feature_store_df,
+        max_workers=3,
+        wait=True
+    )
+    
+    print(f"✅ Successfully ingested {len(feature_store_df)} records into Feature Store!")
+    logger.info(f"Successfully ingested {len(feature_store_df)} records into Feature Store")
+    
+    # Save Feature Store DataFrame for verification
+    feature_store_output_path = "/opt/ml/processing/output/feature_store_data.csv"
+    feature_store_df.to_csv(feature_store_output_path, index=False)
+    print(f"✅ Feature Store data saved to: {feature_store_output_path}")
+    
+    # Log ingestion metrics
+    ingestion_metrics = {
+        'feature_group_name': feature_group_name,
+        'records_ingested': len(feature_store_df),
+        'ingestion_timestamp': current_time.isoformat(),
+        'features_count': len(feature_columns),
+        'region': region
+    }
+    
+    print(f"\n📊 Feature Store Ingestion Metrics:")
+    for metric, value in ingestion_metrics.items():
+        print(f"  {metric}: {value}")
+        logger.info(f"{metric}: {value}")
+    
+except Exception as e:
+    logger.error(f"❌ Error during Feature Store ingestion: {str(e)}")
+    print(f"\n❌ Error during Feature Store ingestion: {str(e)}")
+    print("⚠️  Continuing with local file outputs...")
+    # Don't exit, allow the job to complete with file outputs
+
+print("\n" + "="*60)
+print("🏪 FEATURE STORE INGESTION COMPLETED")
+print("="*60)
+
 # Write final summary to log file
 logger.info("=" * 50)
 logger.info("PROCESSING JOB COMPLETED SUCCESSFULLY")
 logger.info("=" * 50)
 logger.info(f"Total rows processed: {len(transform_df)}")
-logger.info(f"Output files created: 3")
+logger.info(f"Output files created: 4 (including feature_store_data.csv)")
 logger.info(f"Log file location: {log_file}")
 logger.info("=" * 50)
