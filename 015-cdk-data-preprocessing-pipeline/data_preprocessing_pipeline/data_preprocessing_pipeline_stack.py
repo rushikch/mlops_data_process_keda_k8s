@@ -30,6 +30,11 @@ class DataPreprocessingPipelineStack(Stack):
         """
         self.__create_data_preprocessing_pipeline(app_prefix)
 
+        """
+        Create SageMaker Feature Store with Feature Groups.
+        """
+        self.__create_feature_store(app_prefix)
+
     def __create_s3_buckets(self, app_prefix: str) -> None:
         """
         Create S3 buckets for raw data, processed data, model artifacts, and logs.
@@ -61,6 +66,14 @@ class DataPreprocessingPipelineStack(Stack):
             self,
             f"{app_prefix}-logs-bucket",
             bucket_name=f"{app_prefix}-logs-bucket",
+            removal_policy=RemovalPolicy.DESTROY,
+            auto_delete_objects=True,
+        )
+        # Create S3 bucket for offline feature store
+        self.feature_store_bucket = s3.Bucket(
+            self,
+            f"{app_prefix}-feature-store-bucket",
+            bucket_name=f"{app_prefix}-feature-store-bucket",
             removal_policy=RemovalPolicy.DESTROY,
             auto_delete_objects=True,
         )
@@ -104,3 +117,56 @@ class DataPreprocessingPipelineStack(Stack):
 
         pass  # Placeholder for the actual pipeline creation logic
         # We are not implementing the actual pipeline creation logic here, we are using the github action to create the pipeline.
+    
+    def __create_feature_store(self, app_prefix: str) -> None:
+        """
+        Create SageMaker Feature Store with Feature Groups.
+        :param app_prefix: Prefix for naming resources.
+        """
+
+        # Define feature definitions for your features
+        # Adjust these based on your actual features
+        feature_definitions = [
+            sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
+                feature_name="feature_id",
+                feature_type="String"
+            ),
+            sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
+                feature_name="event_time",
+                feature_type="String"
+            ),
+            sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
+                feature_name="feature_1",
+                feature_type="Fractional"
+            ),
+            sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
+                feature_name="feature_2",
+                feature_type="Integral"
+            ),
+            sagemaker.CfnFeatureGroup.FeatureDefinitionProperty(
+                feature_name="feature_3",
+                feature_type="String"
+            ),
+        ]
+
+        # Create Feature Group
+        self.feature_group = sagemaker.CfnFeatureGroup(
+            self,
+            f"{app_prefix}-feature-group",
+            feature_group_name=f"{app_prefix}-feature-group",
+            record_identifier_feature_name="feature_id",
+            event_time_feature_name="event_time",
+            feature_definitions=feature_definitions,
+            # Enable online store for real-time inference
+            online_store_config={
+                "EnableOnlineStore": True
+            },
+            # Enable offline store for batch processing and training
+            offline_store_config={
+                "S3StorageConfig": {
+                    "S3Uri": f"s3://{self.feature_store_bucket.bucket_name}/offline-store"
+                }
+            },
+            role_arn=self.data_preprocessing_role.role_arn,
+            description="Feature group for ML pipeline features",
+        )
