@@ -73,7 +73,7 @@ jobs:
 
       - name: Upload preprocessing script to S3
         run: |
-          aws s3 cp preprocessing/preprocessing.py \
+          aws s3 cp 015-cdk-data-preprocessing-pipeline/scripts/preprocessing_script.py \
             s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing_script.py
 
       - name: Generate job name with timestamp
