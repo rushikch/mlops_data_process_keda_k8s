@@ -71,10 +71,10 @@ jobs:
           echo "Using SageMaker image: ${IMAGE_URI}"
           echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
 
-      # - name: Upload preprocessing script to S3
-      #   run: |
-      #     aws s3 cp preprocessing/preprocessing.py \
-      #       s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing.py
+      - name: Upload preprocessing script to S3
+        run: |
+          aws s3 cp preprocessing/preprocessing.py \
+            s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing_script.py
 
       - name: Generate job name with timestamp
         id: job-name
