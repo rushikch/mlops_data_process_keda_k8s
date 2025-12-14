@@ -1,16 +1,3 @@
-#!/usr/bin/env python3
-import subprocess
-import sys
-
-# Install SageMaker SDK at runtime
-print("📦 Installing SageMaker SDK...")
-subprocess.check_call([
-    sys.executable, '-m', 'pip', 'install', 
-    'sagemaker>=2.200.0', '--quiet'
-])
-print("✅ SageMaker SDK installed successfully!")
-
-# Now import all required libraries
 import pandas as pd
 import sys
 import os
