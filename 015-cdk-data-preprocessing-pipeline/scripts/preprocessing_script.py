@@ -25,10 +25,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize SageMaker session and Feature Store client
-sagemaker_session = sagemaker.Session()
-region = sagemaker_session.boto_region_name
+# Initialize SageMaker session and Feature Store client (FIXED)
+region = (
+    os.environ.get("AWS_REGION")
+    or os.environ.get("AWS_DEFAULT_REGION")
+    or "us-east-1"
+)
+
+boto_sess = boto3.Session(region_name=region)
+sagemaker_session = sagemaker.Session(boto_session=boto_sess)
+
 logger.info(f"Initialized SageMaker session in region: {region}")
+print(f"✅ Initialized SageMaker session in region: {region}")
 
 # Load dataset
 try:
