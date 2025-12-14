@@ -24,6 +24,7 @@ env:
   PROCESSING_INSTANCE_TYPE: ml.t3.medium
   PROCESSING_INSTANCE_COUNT: 1
   SKLEARN_VERSION: '1.2-1'  # SageMaker scikit-learn version
+  ECR_REPOSITORY_NAME: mlops-data-preprocessing-pipeline-sklearn-custom  # ECR repo created by CDK
 
 jobs:
   run-preprocessing:
@@ -70,33 +71,87 @@ jobs:
           
       #     echo "Using SageMaker image: ${IMAGE_URI}"
       #     echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
-      - name: Build and push custom scikit-learn image to ECR
-        id: get-image
-        env:
-          APP_PREFIX: ${{ env.APP_PREFIX }}
-          AWS_REGION: ${{ env.AWS_REGION }}
-          SKLEARN_VERSION: ${{ env.SKLEARN_VERSION }}
-        run: |
-          REPO_NAME="${APP_PREFIX}-sklearn-custom"
+      # - name: Build and push custom scikit-learn image to ECR
+      #   id: get-image
+      #   env:
+      #     APP_PREFIX: ${{ env.APP_PREFIX }}
+      #     AWS_REGION: ${{ env.AWS_REGION }}
+      #     SKLEARN_VERSION: ${{ env.SKLEARN_VERSION }}
+      #   run: |
+      #     REPO_NAME="${APP_PREFIX}-sklearn-custom"
           
-          # Get the ECR repository URI
-          REPO_URI=$(aws ecr describe-repositories --repository-names $REPO_NAME --query 'repositories[0].repositoryUri' --output text)
+      #     # Get the ECR repository URI
+      #     REPO_URI=$(aws ecr describe-repositories --repository-names $REPO_NAME --query 'repositories[0].repositoryUri' --output text)
+          
+      #     echo "Building Docker image..."
+      #     docker build -t sklearn-custom-image -f 015-cdk-data-preprocessing-pipeline/Dockerfile .
+
+      #     echo "Tagging Docker image..."
+      #     echo "Docker image tag based on commit SHA..."
+      #     COMMIT_SHA=$(git rev-parse --short HEAD)
+      #     docker tag sklearn-custom-image:latest ${REPO_URI}:${COMMIT_SHA}
+          
+      #     echo "Logging in to ECR..."
+      #     aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${REPO_URI}
+          
+      #     echo "Pushing Docker image to ECR..."
+      #     docker push ${REPO_URI}:${COMMIT_SHA}
+          
+      #     echo "image_uri=${REPO_URI}:${COMMIT_SHA}" >> $GITHUB_OUTPUT
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to SageMaker ECR (for base image)
+        run: |
+          echo "Logging in to SageMaker ECR to pull base image..."
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            docker login --username AWS --password-stdin 683313688378.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          echo "✅ Successfully logged in to SageMaker ECR"
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Get repository URI
+        id: get-repo
+        run: |
+          REPO_URI=$(aws ecr describe-repositories \
+            --repository-names ${{ env.ECR_REPOSITORY_NAME }} \
+            --query 'repositories[0].repositoryUri' \
+            --output text)
+          echo "repo_uri=${REPO_URI}" >> $GITHUB_OUTPUT
+          echo "Repository URI: ${REPO_URI}"
+
+      - name: Build and push Docker image
+        id: build-image
+        env:
+          REPO_URI: ${{ steps.get-repo.outputs.repo_uri }}
+        run: |
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          IMAGE_TAG="${COMMIT_SHA}"
+          IMAGE_URI="${REPO_URI}:${IMAGE_TAG}"
           
           echo "Building Docker image..."
-          docker build -t sklearn-custom-image -f 015-cdk-data-preprocessing-pipeline/Dockerfile .
-
-          echo "Tagging Docker image..."
-          echo "Docker image tag based on commit SHA..."
-          COMMIT_SHA=$(git rev-parse --short HEAD)
-          docker tag sklearn-custom-image:latest ${REPO_URI}:${COMMIT_SHA}
+          echo "Base image: 683313688378.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/sagemaker-scikit-learn:${{ env.SKLEARN_VERSION }}-cpu-py3"
+          echo "Target image: ${IMAGE_URI}"
           
-          echo "Logging in to ECR..."
-          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${REPO_URI}
+          docker build \
+            -t sklearn-custom-image:latest \
+            -t sklearn-custom-image:${IMAGE_TAG} \
+            -f 015-cdk-data-preprocessing-pipeline/Dockerfile \
+            .
           
-          echo "Pushing Docker image to ECR..."
-          docker push ${REPO_URI}:${COMMIT_SHA}
+          echo "Tagging image for ECR..."
+          docker tag sklearn-custom-image:${IMAGE_TAG} ${IMAGE_URI}
+          docker tag sklearn-custom-image:${IMAGE_TAG} ${REPO_URI}:latest
           
-          echo "image_uri=${REPO_URI}:${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "Pushing image to ECR..."
+          docker push ${IMAGE_URI}
+          docker push ${REPO_URI}:latest
+          
+          echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
+          echo "✅ Image pushed successfully: ${IMAGE_URI}"
 
       - name: Upload preprocessing script & dataset to S3
         run: |
