@@ -1,7 +1,7 @@
 # Use SageMaker's scikit-learn image as base
 # For us-east-1 region
 # FROM 683313688378.dkr.ecr.us-east-1.amazonaws.com/sagemaker-scikit-learn:1.2-1-cpu-py3
-FROM 683313688378.dkr.ecr.us-east-1.amazonaws.com/sagemaker-python:3.10
+FROM 763104351884.dkr.ecr.us-east-1.amazonaws.com/sagemaker-python:3.10
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 

@@ -106,7 +106,8 @@ jobs:
         run: |
           echo "Logging in to SageMaker ECR to pull base image..."
           aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
-            docker login --username AWS --password-stdin 683313688378.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+            docker login --username AWS --password-stdin 683313688378.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com \
+            docker login --username AWS --password-stdin 763104351884.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
           echo "✅ Successfully logged in to SageMaker ECR"
 
       - name: Login to Amazon ECR
