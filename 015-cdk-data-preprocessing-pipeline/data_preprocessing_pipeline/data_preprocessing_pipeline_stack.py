@@ -5,6 +5,7 @@ from aws_cdk import (
     RemovalPolicy,
     aws_s3 as s3,
     aws_sagemaker as sagemaker,
+    aws_ecr as ecr,
 )
 
 
@@ -34,6 +35,11 @@ class DataPreprocessingPipelineStack(Stack):
         Create SageMaker Feature Store with Feature Groups.
         """
         self.__create_feature_store(app_prefix)
+
+        """
+        Create ECR repository for custom processing images.
+        """
+        self.__create_ecr_repository(app_prefix)
 
     def __create_s3_buckets(self, app_prefix: str) -> None:
         """
@@ -234,3 +240,22 @@ class DataPreprocessingPipelineStack(Stack):
             role_arn=self.data_preprocessing_role.role_arn,
             description="Feature group for employee data with engineered features",
         )
+    
+    # Create ECR repository for custom processing images
+    def __create_ecr_repository(self, app_prefix: str) -> None:
+        """
+        Create ECR repository for custom processing images.
+        :param app_prefix: Prefix for naming resources.
+        """
+        
+        self.processing_image_repository = ecr.Repository(
+            self,
+            f"{app_prefix}-scikit-learn",
+            repository_name=f"{app_prefix}-sklearn-custom",
+            removal_policy=RemovalPolicy.DESTROY,
+            empty_on_delete=True,
+            image_scan_on_push=True,
+        )
+        
+        # Grant pull permissions to the SageMaker role
+        self.processing_image_repository.grant_pull(self.data_preprocessing_role)
