@@ -57,9 +57,9 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
-        run: |
-          pip install --upgrade boto3 sagemaker>=2.0
+      # - name: Install dependencies
+      #   run: |
+      #     pip install --upgrade boto3 sagemaker>=2.0
 
       # - name: Get SageMaker scikit-learn image URI
       #   id: get-image
