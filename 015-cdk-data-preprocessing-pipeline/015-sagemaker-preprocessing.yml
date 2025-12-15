@@ -24,6 +24,7 @@ env:
   PROCESSING_INSTANCE_TYPE: ml.t3.medium
   PROCESSING_INSTANCE_COUNT: 1
   SKLEARN_VERSION: '1.2-1'  # SageMaker scikit-learn version
+  ECR_REPOSITORY_NAME: mlops-data-preprocessing-pipeline-sklearn-custom  # ECR repo created by CDK
 
 jobs:
   run-preprocessing:
@@ -55,26 +56,71 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Install dependencies
+      - name: Login to SageMaker ECR (for base image)
         run: |
-          pip install --upgrade boto3 sagemaker>=2.0
-
-      - name: Get SageMaker scikit-learn image URI
-        id: get-image
-        run: |
-          # SageMaker sklearn image URI pattern for us-east-1
-          # Format: {account}.dkr.ecr.{region}.amazonaws.com/sagemaker-scikit-learn:{version}-cpu-py3
-          ACCOUNT_ID="683313688378"  # SageMaker account for us-east-1
-          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/sagemaker-scikit-learn:${{ env.SKLEARN_VERSION }}-cpu-py3"
+          echo "Logging in to SageMaker ECR to pull base image..."
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            docker login --username AWS --password-stdin 683313688378.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
           
-          echo "Using SageMaker image: ${IMAGE_URI}"
-          echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
+          echo "Logging in to SageMaker ECR to pull python base image..."
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            docker login --username AWS --password-stdin 763104351884.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          echo "✅ Successfully logged in to SageMaker ECR"
 
-      # - name: Upload preprocessing script to S3
-      #   run: |
-      #     aws s3 cp preprocessing/preprocessing.py \
-      #       s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing.py
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Get repository URI
+        id: get-repo
+        run: |
+          REPO_URI=$(aws ecr describe-repositories \
+            --repository-names ${{ env.ECR_REPOSITORY_NAME }} \
+            --query 'repositories[0].repositoryUri' \
+            --output text)
+          echo "repo_uri=${REPO_URI}" >> $GITHUB_OUTPUT
+          echo "Repository URI: ${REPO_URI}"
+
+      - name: Build and push Docker image
+        id: build-image
+        env:
+          REPO_URI: ${{ steps.get-repo.outputs.repo_uri }}
+        run: |
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          IMAGE_TAG="${COMMIT_SHA}"
+          IMAGE_URI="${REPO_URI}:${IMAGE_TAG}"
+          
+          echo "Building Docker image..."
+          echo "Base image: 683313688378.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/sagemaker-scikit-learn:${{ env.SKLEARN_VERSION }}-cpu-py3"
+          echo "Target image: ${IMAGE_URI}"
+          
+          docker build \
+            -t sklearn-custom-image:${IMAGE_TAG} \
+            -f 015-cdk-data-preprocessing-pipeline/Dockerfile \
+            .
+          
+          echo "Tagging image for ECR..."
+          docker tag sklearn-custom-image:${IMAGE_TAG} ${IMAGE_URI}
+          
+          echo "Pushing image to ECR..."
+          docker push ${IMAGE_URI}
+          
+          echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
+          echo "✅ Image pushed successfully: ${IMAGE_URI}"
+
+      - name: Upload preprocessing script & dataset to S3
+        run: |
+          echo "Uploading preprocessing script to S3..."
+          aws s3 cp 015-cdk-data-preprocessing-pipeline/scripts/preprocessing_script.py \
+            s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing_script.py
+          
+            echo "Uploading sample dataset to S3..."
+          aws s3 cp 015-cdk-data-preprocessing-pipeline/data/mock_data.csv \
+            s3://${{ env.APP_PREFIX }}-raw-data-bucket/input/mock_data.csv
 
       - name: Generate job name with timestamp
         id: job-name
@@ -86,12 +132,12 @@ jobs:
       - name: Update SageMaker Processing Job configuration
         id: job-config
         env:
-          IMAGE_URI: ${{ steps.get-image.outputs.image_uri }}
+          IMAGE_URI: ${{ steps.build-image.outputs.image_uri }}
           JOB_NAME: ${{ steps.job-name.outputs.job_name }}
           INPUT_PATH: ${{ github.event.inputs.input_data_path || format('s3://{0}-raw-data-bucket/input/', env.APP_PREFIX) }}
           OUTPUT_PATH: ${{ github.event.inputs.output_data_path || format('s3://{0}-processed-data-bucket/output/', env.APP_PREFIX) }}
           LOGS_PATH: s3://${{ env.APP_PREFIX }}-logs-bucket/processing-jobs/${{ steps.job-name.outputs.job_name }}/
-          SCRIPT_PATH: s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing.py
+          SCRIPT_PATH: s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing_script.py
         run: |
           # Replace placeholders in the job config template
           sed -e "s|{{JOB_NAME}}|$JOB_NAME|g" \

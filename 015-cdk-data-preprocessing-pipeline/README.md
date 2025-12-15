@@ -1,544 +1,378 @@
-# 🚀 Hands-On Guide: SageMaker Data Preprocessing Pipeline with CDK & GitHub Actions
+# Building Production-Ready MLOps: Custom Docker Images, SageMaker Feature Store & Automated CI/CD
+### A hands-on guide to building production-grade ML infrastructure with custom scikit-learn containers, SageMaker Feature Store, ECR integration, and automated GitHub Actions workflows
 
-## Overview
+## 📋 Overview
 
-This guide demonstrates building an automated data preprocessing pipeline using AWS SageMaker Processing Jobs, AWS CDK for infrastructure, and GitHub Actions for CI/CD. You'll learn to process raw data, perform transformations, and automate the entire workflow.
+This advanced guide demonstrates building a production-grade MLOps pipeline that combines:
+- **Custom Docker Images** with enhanced SageMaker SDK
+- **SageMaker Feature Store** for centralized feature management
+- **ECR Integration** for container registry
+- **Automated CI/CD** with GitHub Actions
+- **Jupyter Notebook** for feature verification
 
-## What You'll Build
+## 🎯 What You'll Build
 
-- **S3 Buckets** for raw data, processed data, model artifacts, and logs
-- **IAM Roles** with fine-grained permissions for data processing
-- **SageMaker Processing Job** for data preprocessing
-- **GitHub Actions Workflow** for automated pipeline execution
-- **Data Preprocessing Script** with cleaning and feature engineering
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────────┐
+│  GitHub Actions │───▶│  Custom Docker   │───▶│  SageMaker          │
+│  (CI/CD)        │    │  (ECR)           │    │  Processing Job     │
+└─────────────────┘    └──────────────────┘    └─────────┬───────────┘
+                                                         │
+┌─────────────────────────────────────────────────────────┼─────────────────┐
+│                    Data Processing                      │                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │                 │
+│  │ Raw Data    │─▶│ Clean &     │─▶│ Feature         │  │                 │
+│  │ (S3)        │  │ Transform   │  │ Engineering     │  │                 │
+│  └─────────────┘  └─────────────┘  └─────────────────┘  │                 │
+└─────────────────────────────────────────────────────────┼─────────────────┘
+                                                         │
+                                                         ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    SageMaker Feature Store                              │
+│  ┌─────────────────┐              ┌─────────────────────────────────┐   │
+│  │  Online Store   │              │         Offline Store           │   │
+│  │  (Real-time)    │              │      (S3 + Glue Catalog)        │   │
+│  │  - Low latency  │              │  - Batch processing             │   │
+│  │  - Point lookup │              │  - Time travel                  │   │
+│  └─────────────────┘              └─────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
-## Prerequisites
+## 📦 Prerequisites
 
-- AWS Account with SageMaker access
-- GitHub Account
+- AWS Account with SageMaker, ECR, and Feature Store permissions
+- Docker installed locally
 - AWS CLI configured
-- Python 3.8 or higher
-- Basic understanding of pandas and data processing
-- Completed [013-cdk-sagemaker-setup](../013-cdk-sagemaker-setup) (optional but recommended)
+- Python 3.8+
+- Basic understanding of Docker and MLOps concepts
 
-## Architecture Overview
-![Architecture Diagram](./img/12-mlops-preprocessing-pipeine.png)
-
-## Step 1: Clone Repository and Setup
+## 🛠️ Step 1: Clone Repository and Setup
 
 ### Clone the MLOps Repository
 
 ```bash
 git clone https://github.com/anveshmuppeda/mlops.git
-cd mlops/014-cdk-data-preprocessing-pipeline
+cd mlops/015-cdk-data-preprocessing-pipeline
 ```
 
-### Initialize Python Environment
+### Setup Python Environment
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate.bat
-```
-
-### Install Dependencies
-
-The `requirements.txt` file is already provided in the repository:
-
-```bash
 pip install -r requirements.txt
 ```
 
-## Step 2: Review CDK Infrastructure
+## 🏗️ Step 2: Review Enhanced CDK Infrastructure
 
-The CDK infrastructure is already implemented in the repository.
+The CDK stack now includes advanced components:
 
-### Stack File
+### New Infrastructure Components
 
-Review `data_preprocessing_pipeline/data_preprocessing_pipeline_stack.py`:
+1. **ECR Repository** for custom Docker images
+2. **SageMaker Feature Store** with online/offline stores
+3. **Enhanced IAM Roles** with Feature Store permissions
+4. **Additional S3 Bucket** for Feature Store offline storage
+
+### Key Features Added
 
 ```python
-from constructs import Construct
-from aws_cdk import (
-    Stack,
-    aws_iam as iam,
-    RemovalPolicy,
-    aws_s3 as s3,
+# ECR Repository for custom images
+self.processing_image_repository = ecr.Repository(
+    repository_name=f"{app_prefix}-sklearn-custom",
+    image_scan_on_push=True
 )
 
-class DataPreprocessingPipelineStack(Stack):
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
-        super().__init__(scope, construct_id, **kwargs)
-        
-        app_prefix = "mlops-data-preprocessing-pipeline"
-        
-        # Create S3 buckets
-        self.__create_s3_buckets(app_prefix)
-        
-        # Create IAM roles
-        self.__create_iam_roles(app_prefix)
-    
-    def __create_s3_buckets(self, app_prefix: str) -> None:
-        # Raw data bucket
-        self.raw_data_bucket = s3.Bucket(
-            self,
-            f"{app_prefix}-raw-data-bucket",
-            bucket_name=f"{app_prefix}-raw-data-bucket",
-            removal_policy=RemovalPolicy.DESTROY,
-            auto_delete_objects=True,
-        )
-        
-        # Processed data bucket
-        self.processed_data_bucket = s3.Bucket(
-            self,
-            f"{app_prefix}-processed-data-bucket",
-            bucket_name=f"{app_prefix}-processed-data-bucket",
-            removal_policy=RemovalPolicy.DESTROY,
-            auto_delete_objects=True,
-        )
-        
-        # Model artifacts bucket
-        self.model_artifacts_bucket = s3.Bucket(
-            self,
-            f"{app_prefix}-model-artifacts-bucket",
-            bucket_name=f"{app_prefix}-model-artifacts-bucket",
-            removal_policy=RemovalPolicy.DESTROY,
-            auto_delete_objects=True,
-        )
-        
-        # Logs bucket
-        self.logs_bucket = s3.Bucket(
-            self,
-            f"{app_prefix}-logs-bucket",
-            bucket_name=f"{app_prefix}-logs-bucket",
-            removal_policy=RemovalPolicy.DESTROY,
-            auto_delete_objects=True,
-        )
+# Feature Store with both online and offline stores
+self.feature_group = sagemaker.CfnFeatureGroup(
+    feature_group_name=f"{app_prefix}-employee-features",
+    online_store_config={"EnableOnlineStore": True},
+    offline_store_config={
+        "S3StorageConfig": {"S3Uri": f"s3://{bucket}/offline-store"}
+    }
+)
 ```
 
-### App Entry Point
+## 🐳 Step 3: Review Custom Docker Configuration
 
-Review `app.py`:
+### Dockerfile Analysis
 
-```python
-#!/usr/bin/env python3
-import aws_cdk as cdk
-from data_preprocessing_pipeline.data_preprocessing_pipeline_stack import DataPreprocessingPipelineStack
+The `Dockerfile` creates a custom SageMaker processing image:
 
-app = cdk.App()
-DataPreprocessingPipelineStack(app, "DataPreprocessingPipelineStack")
-app.synth()
+```dockerfile
+FROM 683313688378.dkr.ecr.us-east-1.amazonaws.com/sagemaker-scikit-learn:1.2-1-cpu-py3
+
+ENV PYTHONUNBUFFERED=1
+
+# Upgrade SageMaker SDK and dependencies
+RUN pip uninstall -y sagemaker && \
+    pip install --no-cache-dir \
+        sagemaker==2.218.0 \
+        boto3>=1.28.0 \
+        pandas>=2.0.0 \
+        numpy>=1.24.0
+
+WORKDIR /opt/ml/processing
 ```
 
-## Step 3: Deploy Infrastructure
+### Why Custom Docker?
 
-### Bootstrap CDK
+1. **Latest SageMaker SDK** - Access to newest features
+2. **Specific Dependencies** - Control over package versions
+3. **Feature Store Support** - Enhanced SageMaker SDK for Feature Store
+4. **Reproducibility** - Consistent environment across runs
+
+## 🚀 Step 4: Deploy Infrastructure
+
+### Bootstrap and Deploy
 
 ```bash
 cdk bootstrap
-```
-
-### Deploy Stack
-
-```bash
 cdk deploy
 ```
 
 This creates:
-- 4 S3 buckets
-- IAM role with appropriate permissions
+- 5 S3 buckets (including Feature Store bucket)
+- ECR repository
+- SageMaker Feature Group
+- Enhanced IAM roles
 
-## Step 4: Review Preprocessing Script
+## 📊 Step 5: Review Enhanced Preprocessing Script
 
-The preprocessing script is already provided in `data/preprocessing_script.py`:
+The `scripts/preprocessing_script.py` now includes:
+
+### Feature Store Integration
 
 ```python
-import pandas as pd
-import json
-import numpy as np
-from datetime import datetime
+# Initialize SageMaker session for Feature Store
+boto_sess = boto3.Session(region_name=region)
+sagemaker_session = sagemaker.Session(boto_session=boto_sess)
 
-# Load dataset
-df = pd.read_csv('/opt/ml/processing/input/mock_data.csv')
-print(f"✅ Dataset loaded successfully!")
-print(f"📏 Dataset shape: {df.shape}")
+# Prepare data for Feature Store
+feature_store_df['employee_id'] = feature_store_df.index.astype(str)
+feature_store_df['event_time'] = current_time.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-# 1. Handle Missing Values
-age_median = df['age'].median()
-salary_median = df['salary'].median()
-
-df['age'] = df['age'].fillna(age_median)
-df['salary'] = df['salary'].fillna(salary_median)
-df['department'] = df['department'].fillna('Unknown')
-
-# 2. Extract JSON Fields
-df['profile'] = df['profile'].apply(
-    lambda x: json.loads(x) if pd.notnull(x) else {}
-)
-
-df['address'] = df['profile'].apply(lambda x: x.get('address', None))
-df['phone'] = df['profile'].apply(lambda x: x.get('phone', None))
-df['email'] = df['profile'].apply(lambda x: x.get('email', None))
-
-# 3. Drop original profile column
-cleaned_df = df.drop(columns=['profile'])
-
-# 4. Save cleaned data
-cleaned_df.to_csv("/opt/ml/processing/output/cleaned_data.csv", index=False)
-print("✅ Cleaned data saved")
-
-# 5. Feature Engineering
-transform_df = pd.read_csv('/opt/ml/processing/output/cleaned_data.csv')
-
-# Address length feature
-transform_df['address_length'] = transform_df['address'].apply(
-    lambda x: len(str(x))
-)
-
-# Salary categories
-bins = [0, 50000, 70000, 100000]
-labels = ['low', 'medium', 'high']
-transform_df['salary_category'] = pd.cut(
-    df['salary'], bins=bins, labels=labels, include_lowest=True
-)
-
-# Age groups
-age_bins = [0, 25, 35, 45, 55, float('inf')]
-age_labels = ['Young', 'Early Career', 'Mid Career', 'Senior', 'Experienced']
-transform_df['age_group'] = pd.cut(
-    df['age'], bins=age_bins, labels=age_labels, include_lowest=True
-)
-
-# 6. Save transformed data
-transform_df.to_csv("/opt/ml/processing/output/transformed_data.csv", index=False)
-print("✅ Transformed data saved")
-
-# 7. Generate department statistics
-department_stats = df.groupby('department').agg({
-    'salary': 'mean',
-    'age': 'mean'
-}).reset_index()
-
-department_stats.columns = ['Department', 'Average Salary', 'Average Age']
-department_stats.to_csv(
-    "/opt/ml/processing/output/department_statistics.csv", index=False
-)
-print("✅ Department statistics saved")
+# Ingest into Feature Store
+feature_group = FeatureGroup(name=feature_group_name, sagemaker_session=sagemaker_session)
+feature_group.ingest(data_frame=feature_store_df, max_workers=3, wait=True)
 ```
 
-## Step 5: Upload Data and Script to S3
+### Enhanced Logging
 
-### Upload Mock Data
+```python
+# Setup logging to write to both console and S3
+log_dir = '/opt/ml/processing/logs'
+os.makedirs(log_dir, exist_ok=True)
 
-```bash
-aws s3 cp data/mock_data.csv \
-  s3://mlops-data-preprocessing-pipeline-raw-data-bucket/input/
-```
-
-### Upload Preprocessing Script
-
-```bash
-aws s3 cp data/preprocessing_script.py \
-  s3://mlops-data-preprocessing-pipeline-model-artifacts-bucket/scripts/
-```
-
-## Step 6: Review Job Configuration
-
-The job configuration template is already provided in `job-config.json`:
-
-```json
-{
-  "ProcessingJobName": "{{JOB_NAME}}",
-  "ProcessingInputs": [
-    {
-      "InputName": "input-data",
-      "S3Input": {
-        "S3Uri": "{{INPUT_PATH}}",
-        "LocalPath": "/opt/ml/processing/input",
-        "S3DataType": "S3Prefix",
-        "S3InputMode": "File"
-      }
-    },
-    {
-      "InputName": "code",
-      "S3Input": {
-        "S3Uri": "{{SCRIPT_PATH}}",
-        "LocalPath": "/opt/ml/processing/input/code",
-        "S3DataType": "S3Prefix",
-        "S3InputMode": "File"
-      }
-    }
-  ],
-  "ProcessingOutputConfig": {
-    "Outputs": [
-      {
-        "OutputName": "output-data",
-        "S3Output": {
-          "S3Uri": "{{OUTPUT_PATH}}",
-          "LocalPath": "/opt/ml/processing/output",
-          "S3UploadMode": "EndOfJob"
-        }
-      }
+logging.basicConfig(
+    level=logging.INFO,
+    handlers=[
+        logging.FileHandler(os.path.join(log_dir, 'preprocessing.log')),
+        logging.StreamHandler(sys.stdout)
     ]
-  },
-  "ProcessingResources": {
-    "ClusterConfig": {
-      "InstanceCount": 1,
-      "InstanceType": "ml.t3.medium",
-      "VolumeSizeInGB": 30
-    }
-  },
-  "AppSpecification": {
-    "ImageUri": "{{IMAGE_URI}}",
-    "ContainerEntrypoint": [
-      "python3",
-      "/opt/ml/processing/input/code/preprocessing_script.py"
-    ]
-  },
-  "RoleArn": "{{ROLE_ARN}}",
-  "StoppingCondition": {
-    "MaxRuntimeInSeconds": 3600
-  }
-}
+)
 ```
 
-## Step 7: Review GitHub Actions Workflow
+## 🔄 Step 6: Review GitHub Actions Workflow
 
-The GitHub Actions workflow is already configured in `.github/workflows/014-sagemaker-preprocessing.yml`:
+The enhanced workflow (`015-sagemaker-preprocessing.yml`) includes:
 
-### Workflow File
+### Docker Build and Push
 
 ```yaml
-name: SageMaker Preprocessing Job
-
-on:
-  workflow_dispatch:
-    inputs:
-      input_data_path:
-        description: 'S3 path for input data'
-        required: true
-        default: 's3://mlops-data-preprocessing-pipeline-raw-data-bucket/input/'
-      output_data_path:
-        description: 'S3 path for output data'
-        required: true
-        default: 's3://mlops-data-preprocessing-pipeline-processed-data-bucket/output/'
-  push:
-    branches:
-      - main
-    paths:
-      - 'preprocessing/**'
-      - '.github/workflows/014-sagemaker-preprocessing.yml'
-
-env:
-  AWS_REGION: us-east-1
-  APP_PREFIX: mlops-data-preprocessing-pipeline
-  PROCESSING_INSTANCE_TYPE: ml.t3.medium
-  PROCESSING_INSTANCE_COUNT: 1
-  SKLEARN_VERSION: '1.2-1'
-
-jobs:
-  run-preprocessing:
-    runs-on: ubuntu-latest
-    
-    permissions:
-      id-token: write
-      contents: read
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install dependencies
-        run: |
-          pip install --upgrade boto3 sagemaker>=2.0
-
-      - name: Get SageMaker scikit-learn image URI
-        id: get-image
-        run: |
-          ACCOUNT_ID="683313688378"
-          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/sagemaker-scikit-learn:${{ env.SKLEARN_VERSION }}-cpu-py3"
-          echo "image_uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
-
-      - name: Generate job name with timestamp
-        id: job-name
-        run: |
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          JOB_NAME="preprocessing-job-${TIMESTAMP}"
-          echo "job_name=$JOB_NAME" >> $GITHUB_OUTPUT
-
-      - name: Update SageMaker Processing Job configuration
-        id: job-config
-        env:
-          IMAGE_URI: ${{ steps.get-image.outputs.image_uri }}
-          JOB_NAME: ${{ steps.job-name.outputs.job_name }}
-          INPUT_PATH: ${{ github.event.inputs.input_data_path || format('s3://{0}-raw-data-bucket/input/', env.APP_PREFIX) }}
-          OUTPUT_PATH: ${{ github.event.inputs.output_data_path || format('s3://{0}-processed-data-bucket/output/', env.APP_PREFIX) }}
-          SCRIPT_PATH: s3://${{ env.APP_PREFIX }}-model-artifacts-bucket/scripts/preprocessing_script.py
-        run: |
-          sed -e "s|{{JOB_NAME}}|$JOB_NAME|g" \
-              -e "s|{{IMAGE_URI}}|$IMAGE_URI|g" \
-              -e "s|{{INPUT_PATH}}|$INPUT_PATH|g" \
-              -e "s|{{OUTPUT_PATH}}|$OUTPUT_PATH|g" \
-              -e "s|{{SCRIPT_PATH}}|$SCRIPT_PATH|g" \
-              -e "s|{{INSTANCE_COUNT}}|$PROCESSING_INSTANCE_COUNT|g" \
-              -e "s|{{INSTANCE_TYPE}}|$PROCESSING_INSTANCE_TYPE|g" \
-              -e "s|{{ROLE_ARN}}|arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.APP_PREFIX }}-data-preprocessing-role|g" \
-              job-config.json > job-config-final.json
-
-      - name: Start SageMaker Processing Job
-        env:
-          JOB_NAME: ${{ steps.job-name.outputs.job_name }}
-        run: |
-          aws sagemaker create-processing-job --cli-input-json file://job-config-final.json
-          echo "SageMaker processing job started: $JOB_NAME"
-
-      - name: Wait for SageMaker Processing Job to complete
-        env:
-          JOB_NAME: ${{ steps.job-name.outputs.job_name }}
-        run: |
-          aws sagemaker wait processing-job-completed-or-stopped --processing-job-name $JOB_NAME
-          
-          STATUS=$(aws sagemaker describe-processing-job --processing-job-name $JOB_NAME --query 'ProcessingJobStatus' --output text)
-          
-          if [ "$STATUS" != "Completed" ]; then
-            echo "Processing job failed"
-            exit 1
-          fi
+- name: Build and push Docker image
+  run: |
+    docker build -t sklearn-custom-image:${IMAGE_TAG} -f Dockerfile .
+    docker tag sklearn-custom-image:${IMAGE_TAG} ${IMAGE_URI}
+    docker push ${IMAGE_URI}
 ```
 
-### Configure GitHub Secrets
+### Enhanced Job Configuration
 
-Go to GitHub Repository → Settings → Secrets and variables → Actions
+```yaml
+- name: Update SageMaker Processing Job configuration
+  env:
+    IMAGE_URI: ${{ steps.build-image.outputs.image_uri }}
+    LOGS_PATH: s3://${{ env.APP_PREFIX }}-logs-bucket/processing-jobs/${{ steps.job-name.outputs.job_name }}/
+  run: |
+    sed -e "s|{{LOGS_PATH}}|$LOGS_PATH|g" job-config.json > job-config-final.json
+```
 
-Add secrets:
+## 🏪 Step 7: Understanding Feature Store
+
+### Feature Store Components
+
+1. **Online Store**
+   - DynamoDB-based
+   - Sub-millisecond latency
+   - Real-time inference
+   - Point lookups
+
+2. **Offline Store**
+   - S3-based with Parquet format
+   - Glue Data Catalog integration
+   - Time travel capabilities
+   - Batch processing
+
+### Feature Schema
+
+| Feature | Type | Description |
+|---------|------|-------------|
+| employee_id | String | Unique identifier |
+| event_time | String | Timestamp (required) |
+| age | Fractional | Employee age |
+| salary | Fractional | Employee salary |
+| department | String | Department name |
+| address | String | Employee address |
+| phone | String | Phone number |
+| email | String | Email address |
+| address_length | Integral | Length of address |
+| salary_category | String | Low/Medium/High |
+| age_group | String | Age group category |
+
+## 🎬 Step 8: Execute the Pipeline
+
+### Setup GitHub Secrets
+
+Add to your GitHub repository secrets:
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_ACCOUNT_ID`
 
-## Step 8: Run the Pipeline
+### Run the Workflow
 
-### Manual Trigger
-
-1. Go to GitHub → Actions
-2. Select "SageMaker Preprocessing Job"
+1. Go to GitHub Actions
+2. Select "SageMaker Preprocessing Job v2"
 3. Click "Run workflow"
-4. Provide input/output paths (or use defaults)
-5. Click "Run workflow"
+4. Monitor execution
 
-### Automatic Trigger
+### What Happens During Execution
 
-Push changes to:
-- `preprocessing/**` directory
-- `.github/workflows/014-sagemaker-preprocessing.yml`
+1. **Docker Build**: Custom image with latest SageMaker SDK
+2. **ECR Push**: Image pushed to your ECR repository
+3. **Data Upload**: Script and data uploaded to S3
+4. **Job Execution**: SageMaker Processing Job runs
+5. **Feature Ingestion**: Data ingested into Feature Store
+6. **Log Upload**: Processing logs uploaded to S3
 
-## Step 9: Monitor and Verify
+## 📓 Step 9: Verify with Jupyter Notebook
 
-### Check Job Status
+### Open the Verification Notebook
+
+The `load-feature-store.ipynb` notebook demonstrates:
+
+1. **Feature Group Connection**
+```python
+feature_group = FeatureGroup(
+    name="mlops-data-preprocessing-pipeline-employee-features",
+    sagemaker_session=sm_session
+)
+```
+
+2. **Online Store Query** (Real-time)
+```python
+record = feature_group.get_record(
+    record_identifier_value_as_string="0"
+)
+```
+
+3. **Offline Store Query** (Athena)
+```python
+query = feature_group.athena_query()
+query.run(query_string="SELECT * FROM table LIMIT 10")
+offline_df = query.as_dataframe()
+```
+
+### Run in SageMaker Studio
+
+1. Access SageMaker Studio
+2. Upload the notebook
+3. Run all cells
+4. Verify feature data
+
+## 📊 Step 10: Monitor and Verify
+
+### Check Feature Store Status
 
 ```bash
-aws sagemaker list-processing-jobs --max-results 10
+aws sagemaker describe-feature-group \
+  --feature-group-name mlops-data-preprocessing-pipeline-employee-features
 ```
 
-### View Job Details
+### Verify S3 Logs
 
 ```bash
-aws sagemaker describe-processing-job --processing-job-name <job-name>
+aws s3 ls s3://mlops-data-preprocessing-pipeline-logs-bucket/processing-jobs/ --recursive
 ```
 
-### Check CloudWatch Logs
+### Check ECR Images
 
 ```bash
-aws logs tail /aws/sagemaker/ProcessingJobs --follow
+aws ecr describe-images \
+  --repository-name mlops-data-preprocessing-pipeline-sklearn-custom
 ```
 
-### Download Processed Data
+### Query Feature Store via CLI
 
 ```bash
-aws s3 ls s3://mlops-data-preprocessing-pipeline-processed-data-bucket/output/
-
-aws s3 cp s3://mlops-data-preprocessing-pipeline-processed-data-bucket/output/transformed_data.csv ./
+aws sagemaker-featurestore-runtime get-record \
+  --feature-group-name mlops-data-preprocessing-pipeline-employee-features \
+  --record-identifier-value-as-string "0"
 ```
 
-## Step 10: Understand the Data Processing
-
-### Input Data Structure
-
-```csv
-id,name,age,salary,hire_date,profile,department,bonus
-1,Name_103,,,2025-05-16,"{""address"": ""Street 40""}",Marketing,7236.0
-```
-
-### Processing Steps
-
-1. **Missing Value Imputation**
-   - Age: Filled with median
-   - Salary: Filled with median
-   - Department: Filled with 'Unknown'
-
-2. **JSON Field Extraction**
-   - Extract address, phone, email from profile column
-   - Drop original profile column
-
-3. **Feature Engineering**
-   - `address_length`: Length of address string
-   - `salary_category`: Low/Medium/High based on salary
-   - `age_group`: Young/Early Career/Mid Career/Senior/Experienced
-
-4. **Aggregations**
-   - Department-wise average salary and age
-
-### Output Files
-
-1. **cleaned_data.csv**: Data after missing value handling and JSON extraction
-2. **transformed_data.csv**: Data with engineered features
-3. **department_statistics.csv**: Aggregated department metrics
-
-## Step 11: Cost Analysis
+## 💰 Step 11: Cost Analysis
 
 ### Resource Costs
 
-| Resource | Type | Cost |
-|----------|------|------|
-| S3 Storage | Standard | $0.023/GB/month |
-| SageMaker Processing | ml.t3.medium | $0.05/hour |
-| Data Transfer | Out to Internet | $0.09/GB |
-| CloudWatch Logs | Storage | $0.50/GB |
+| Resource | Type | Estimated Cost |
+|----------|------|----------------|
+| ECR Storage | Per GB/month | $0.10 |
+| Feature Store Online | Per million requests | $0.35 |
+| Feature Store Offline | S3 storage | $0.023/GB |
+| Processing Job | ml.t3.medium | $0.05/hour |
+| Glue Catalog | Per table/month | $1.00 |
 
-### Example Calculation
+### Cost Optimization
 
-For a 10-minute processing job:
-- Processing: $0.05 × (10/60) = $0.0083
-- S3 Storage (1GB): $0.023
-- **Total**: ~$0.03 per run
+1. **Use Spot Instances** for processing jobs
+2. **Lifecycle Policies** for ECR images
+3. **S3 Intelligent Tiering** for offline store
+4. **Monitor Feature Store** usage patterns
 
-### Cost Optimization Tips
+## 🔍 Step 12: Advanced Features
 
-1. Use spot instances for non-critical jobs
-2. Compress data before uploading to S3
-3. Set S3 lifecycle policies
-4. Use S3 Intelligent-Tiering
-5. Monitor with AWS Cost Explorer
+### Feature Store Benefits
 
-## Step 12: Cleanup
+1. **Centralized Features** - Single source of truth
+2. **Feature Reuse** - Across multiple models
+3. **Data Lineage** - Track feature origins
+4. **Time Travel** - Historical feature values
+5. **Real-time Serving** - Low-latency inference
+6. **Data Discovery** - Feature catalog
 
-### Delete S3 Buckets
+### Custom Docker Benefits
+
+1. **Version Control** - Specific package versions
+2. **Reproducibility** - Consistent environments
+3. **Security** - Controlled base images
+4. **Performance** - Optimized dependencies
+5. **Flexibility** - Custom configurations
+
+## 🧹 Step 13: Cleanup
+
+### Delete Feature Group
 
 ```bash
-aws s3 rb s3://mlops-data-preprocessing-pipeline-raw-data-bucket --force
-aws s3 rb s3://mlops-data-preprocessing-pipeline-processed-data-bucket --force
-aws s3 rb s3://mlops-data-preprocessing-pipeline-model-artifacts-bucket --force
-aws s3 rb s3://mlops-data-preprocessing-pipeline-logs-bucket --force
+aws sagemaker delete-feature-group \
+  --feature-group-name mlops-data-preprocessing-pipeline-employee-features
+```
+
+### Delete ECR Images
+
+```bash
+aws ecr batch-delete-image \
+  --repository-name mlops-data-preprocessing-pipeline-sklearn-custom \
+  --image-ids imageTag=latest
 ```
 
 ### Destroy CDK Stack
@@ -549,74 +383,151 @@ cdk destroy
 
 ## 🔧 Troubleshooting
 
-### Issue: Processing Job Fails
+### Issue: Docker Build Fails
 
-**Check CloudWatch Logs**:
+**Solution**: Check ECR login and base image availability
 ```bash
-aws logs tail /aws/sagemaker/ProcessingJobs --follow
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin 683313688378.dkr.ecr.us-east-1.amazonaws.com
 ```
+
+### Issue: Feature Store Ingestion Fails
 
 **Common Causes**:
-- Missing input data in S3
-- Incorrect script path
-- Insufficient IAM permissions
-- Script errors
+- Feature Group not in "Created" status
+- Schema mismatch
+- Missing required columns (employee_id, event_time)
+- Data type mismatches
 
-### Issue: GitHub Actions Fails
+**Solution**: Check Feature Group status and data types
 
-**Check**:
-- AWS credentials are correct
-- Secrets are properly configured
-- IAM role exists
-- S3 buckets exist
+### Issue: Logs Not Uploading to S3
 
-### Issue: Data Not Found
+**Root Cause**: No files written to `/opt/ml/processing/logs`
 
-**Verify**:
-```bash
-aws s3 ls s3://mlops-data-preprocessing-pipeline-raw-data-bucket/input/
-aws s3 ls s3://mlops-data-preprocessing-pipeline-model-artifacts-bucket/scripts/
-```
+**Solution**: The script now includes logging setup that writes to this directory
 
-## Best Practices
+### Issue: Athena Query Fails
 
-1. **Version Control**: Keep preprocessing scripts in Git
-2. **Data Validation**: Add data quality checks
-3. **Error Handling**: Implement try-catch blocks
-4. **Logging**: Add comprehensive logging
-5. **Testing**: Test scripts locally before deployment
-6. **Monitoring**: Set up CloudWatch alarms
-7. **Documentation**: Document data transformations
-8. **Security**: Use IAM roles, not access keys
+**Solution**: Wait for offline store to be available (can take 15+ minutes)
 
-## Key Learnings
+## 📚 Best Practices Implemented
 
-1. **SageMaker Processing Jobs**: Scalable data preprocessing
-2. **Infrastructure as Code**: CDK for reproducible infrastructure
-3. **CI/CD Integration**: GitHub Actions for automation
-4. **S3 Data Management**: Organized data storage
-5. **IAM Security**: Least privilege access
-6. **Cost Optimization**: Understanding and managing costs
+### 1. Infrastructure as Code
+- CDK for reproducible infrastructure
+- Version-controlled configurations
+- Environment-specific deployments
 
-## Next Steps
+### 2. Container Management
+- Custom Docker images in ECR
+- Image scanning enabled
+- Proper tagging strategy
 
-1. **Add Data Validation**: Implement Great Expectations
-2. **Parallel Processing**: Use multiple instances
-3. **Feature Store**: Integrate with SageMaker Feature Store
-4. **Model Training**: Connect to training pipeline
-5. **Monitoring**: Add data drift detection
-6. **Notifications**: SNS alerts for job completion
-7. **Scheduling**: Add EventBridge for scheduled runs
+### 3. Feature Management
+- Centralized feature store
+- Schema validation
+- Online and offline access patterns
 
-## Additional Resources
+### 4. CI/CD Pipeline
+- Automated builds and deployments
+- Error handling and rollback
+- Comprehensive logging
 
+### 5. Monitoring and Observability
+- CloudWatch integration
+- S3 log storage
+- Feature Store metrics
+
+## 🎓 Key Learnings
+
+### Technical Concepts
+
+1. **Feature Store Architecture** - Online vs Offline stores
+2. **Custom Container Images** - Building and managing Docker images
+3. **SageMaker Processing** - Scalable data processing
+4. **ECR Integration** - Container registry management
+5. **Athena Queries** - SQL-based feature retrieval
+
+### MLOps Practices
+
+1. **Feature Reusability** - Centralized feature management
+2. **Data Lineage** - Tracking feature origins
+3. **Version Control** - Infrastructure and code versioning
+4. **Automated Testing** - CI/CD pipeline validation
+5. **Cost Optimization** - Resource management strategies
+
+## 🔄 Next Steps
+
+### Immediate Enhancements
+
+1. **Add Data Validation** - Great Expectations integration
+2. **Feature Monitoring** - Data drift detection
+3. **A/B Testing** - Feature flag management
+4. **Model Training** - Connect to training pipeline
+
+### Advanced Features
+
+1. **Multi-Region Deployment** - Global feature availability
+2. **Feature Sharing** - Cross-team collaboration
+3. **Real-time Streaming** - Kinesis integration
+4. **Model Registry** - SageMaker Model Registry
+5. **Automated Retraining** - Based on feature drift
+
+### Production Readiness
+
+1. **Security Hardening** - VPC endpoints, encryption
+2. **Disaster Recovery** - Cross-region backups
+3. **Compliance** - Data governance policies
+4. **Performance Tuning** - Optimize for scale
+
+## 📖 Additional Resources
+
+### AWS Documentation
+- [SageMaker Feature Store](https://docs.aws.amazon.com/sagemaker/latest/dg/feature-store.html)
 - [SageMaker Processing Jobs](https://docs.aws.amazon.com/sagemaker/latest/dg/processing-job.html)
-- [SageMaker Python SDK](https://sagemaker.readthedocs.io/)
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [Amazon ECR User Guide](https://docs.aws.amazon.com/ecr/)
 - [AWS CDK Python Reference](https://docs.aws.amazon.com/cdk/api/v2/python/)
+
+### Community Resources
+- [SageMaker Examples](https://github.com/aws/amazon-sagemaker-examples)
+- [MLOps Best Practices](https://ml-ops.org/)
+- [Feature Store Patterns](https://github.com/aws-samples/amazon-sagemaker-feature-store-examples)
+
+## 🎯 Real-World Applications
+
+### Use Cases
+
+1. **Recommendation Systems** - User and item features
+2. **Fraud Detection** - Transaction and user features
+3. **Personalization** - Customer behavior features
+4. **Risk Assessment** - Financial and behavioral features
+5. **Predictive Maintenance** - Sensor and equipment features
+
+### Industry Examples
+
+- **E-commerce**: Product recommendations, inventory optimization
+- **Financial Services**: Credit scoring, fraud detection
+- **Healthcare**: Patient risk assessment, treatment optimization
+- **Manufacturing**: Predictive maintenance, quality control
+- **Telecommunications**: Churn prediction, network optimization
+
+## 📝 Summary
+
+This advanced MLOps pipeline demonstrates:
+
+✅ **Custom Docker Images** for enhanced processing capabilities  
+✅ **SageMaker Feature Store** for centralized feature management  
+✅ **ECR Integration** for container registry  
+✅ **Automated CI/CD** with GitHub Actions  
+✅ **Comprehensive Logging** with S3 storage  
+✅ **Jupyter Verification** for feature validation  
+✅ **Production-Ready** infrastructure and practices  
+
+The pipeline processes employee data, extracts features, and stores them in both online and offline Feature Stores, making them available for real-time inference and batch training workflows.
 
 ---
 
 **Author**: Anvesh Muppeda  
 **Project**: MLOps with AWS  
-**Repository**: [github.com/anveshmuppeda/mlops](https://github.com/anveshmuppeda/mlops)
+**Repository**: [github.com/anveshmuppeda/mlops](https://github.com/anveshmuppeda/mlops)  
+**Blog**: [Medium @muppedaanvesh](https://medium.com/@muppedaanvesh)
