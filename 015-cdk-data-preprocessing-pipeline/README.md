@@ -1,7 +1,7 @@
 # Advanced Data Processing with SageMaker: Custom Containers and Feature Store Ingestion
 ### A hands-on guide to building production-grade ML infrastructure with custom scikit-learn containers, SageMaker Feature Store, ECR integration, and automated GitHub Actions workflows
 
-## 📋 Overview
+## Overview
 
 This advanced guide demonstrates building a production-grade MLOps pipeline that combines:
 - **Custom Docker Images** with enhanced SageMaker SDK
@@ -10,10 +10,10 @@ This advanced guide demonstrates building a production-grade MLOps pipeline that
 - **Automated CI/CD** with GitHub Actions
 - **Jupyter Notebook** for feature verification
 
-## 🎯 What You'll Build
+## What You'll Build
 ![Architecture Diagram](./img/13-mlops-feature-store.png)
 
-## 📦 Prerequisites
+## Prerequisites
 
 - AWS Account with SageMaker, ECR, and Feature Store permissions
 - Docker installed locally
@@ -21,7 +21,7 @@ This advanced guide demonstrates building a production-grade MLOps pipeline that
 - Python 3.8+
 - Basic understanding of Docker and MLOps concepts
 
-## 🛠️ Step 1: Clone Repository and Setup
+## Step 1: Clone Repository and Setup
 
 ### Clone the MLOps Repository
 
@@ -38,7 +38,7 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate.bat
 pip install -r requirements.txt
 ```
 
-## 🏗️ Step 2: Review Enhanced CDK Infrastructure
+## Step 2: Review Enhanced CDK Infrastructure
 
 The CDK stack now includes advanced components:
 
@@ -68,7 +68,7 @@ self.feature_group = sagemaker.CfnFeatureGroup(
 )
 ```
 
-## 🐳 Step 3: Review Custom Docker Configuration
+## Step 3: Review Custom Docker Configuration
 
 ### Dockerfile Analysis
 
@@ -112,7 +112,7 @@ This creates:
 - SageMaker Feature Group
 - Enhanced IAM roles
 
-## 📊 Step 5: Review Enhanced Preprocessing Script
+## Step 5: Review Enhanced Preprocessing Script
 
 The `scripts/preprocessing_script.py` now includes:
 
@@ -148,7 +148,7 @@ logging.basicConfig(
 )
 ```
 
-## 🔄 Step 6: Review GitHub Actions Workflow
+## Step 6: Review GitHub Actions Workflow
 
 The enhanced workflow (`015-sagemaker-preprocessing.yml`) includes:
 
@@ -173,7 +173,7 @@ The enhanced workflow (`015-sagemaker-preprocessing.yml`) includes:
     sed -e "s|{{LOGS_PATH}}|$LOGS_PATH|g" job-config.json > job-config-final.json
 ```
 
-## 🏪 Step 7: Understanding Feature Store
+## Step 7: Understanding Feature Store
 
 ### Feature Store Components
 
@@ -205,7 +205,7 @@ The enhanced workflow (`015-sagemaker-preprocessing.yml`) includes:
 | salary_category | String | Low/Medium/High |
 | age_group | String | Age group category |
 
-## 🎬 Step 8: Execute the Pipeline
+## Step 8: Execute the Pipeline
 
 ### Setup GitHub Secrets
 
@@ -230,7 +230,7 @@ Add to your GitHub repository secrets:
 5. **Feature Ingestion**: Data ingested into Feature Store
 6. **Log Upload**: Processing logs uploaded to S3
 
-## 📓 Step 9: Verify with Jupyter Notebook
+## Step 9: Verify with Jupyter Notebook
 
 ### Open the Verification Notebook
 
@@ -265,7 +265,7 @@ offline_df = query.as_dataframe()
 3. Run all cells
 4. Verify feature data
 
-## 📊 Step 10: Monitor and Verify
+## Step 10: Monitor and Verify
 
 ### Check Feature Store Status
 
@@ -295,7 +295,7 @@ aws sagemaker-featurestore-runtime get-record \
   --record-identifier-value-as-string "0"
 ```
 
-## 💰 Step 11: Cost Analysis
+## Step 11: Cost Analysis
 
 ### Resource Costs
 
@@ -314,7 +314,7 @@ aws sagemaker-featurestore-runtime get-record \
 3. **S3 Intelligent Tiering** for offline store
 4. **Monitor Feature Store** usage patterns
 
-## 🔍 Step 12: Advanced Features
+## Step 12: Advanced Features
 
 ### Feature Store Benefits
 
@@ -333,7 +333,7 @@ aws sagemaker-featurestore-runtime get-record \
 4. **Performance** - Optimized dependencies
 5. **Flexibility** - Custom configurations
 
-## 🧹 Step 13: Cleanup
+## Step 13: Cleanup
 
 ### Delete Feature Group
 
@@ -356,7 +356,7 @@ aws ecr batch-delete-image \
 cdk destroy
 ```
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### Issue: Docker Build Fails
 
@@ -386,7 +386,7 @@ aws ecr get-login-password --region us-east-1 | \
 
 **Solution**: Wait for offline store to be available (can take 15+ minutes)
 
-## 📚 Best Practices Implemented
+## Best Practices Implemented
 
 ### 1. Infrastructure as Code
 - CDK for reproducible infrastructure
@@ -431,7 +431,7 @@ aws ecr get-login-password --region us-east-1 | \
 4. **Automated Testing** - CI/CD pipeline validation
 5. **Cost Optimization** - Resource management strategies
 
-## 🔄 Next Steps
+## Next Steps
 
 ### Immediate Enhancements
 
@@ -455,7 +455,7 @@ aws ecr get-login-password --region us-east-1 | \
 3. **Compliance** - Data governance policies
 4. **Performance Tuning** - Optimize for scale
 
-## 📖 Additional Resources
+## Additional Resources
 
 ### AWS Documentation
 - [SageMaker Feature Store](https://docs.aws.amazon.com/sagemaker/latest/dg/feature-store.html)
@@ -468,7 +468,7 @@ aws ecr get-login-password --region us-east-1 | \
 - [MLOps Best Practices](https://ml-ops.org/)
 - [Feature Store Patterns](https://github.com/aws-samples/amazon-sagemaker-feature-store-examples)
 
-## 🎯 Real-World Applications
+## Real-World Applications
 
 ### Use Cases
 
@@ -486,7 +486,7 @@ aws ecr get-login-password --region us-east-1 | \
 - **Manufacturing**: Predictive maintenance, quality control
 - **Telecommunications**: Churn prediction, network optimization
 
-## 📝 Summary
+## Summary
 
 This advanced MLOps pipeline demonstrates:
 
