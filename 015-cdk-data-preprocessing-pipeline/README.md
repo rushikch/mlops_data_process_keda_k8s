@@ -413,7 +413,7 @@ aws ecr get-login-password --region us-east-1 | \
 - S3 log storage
 - Feature Store metrics
 
-## 🎓 Key Learnings
+## Key Learnings
 
 ### Technical Concepts
 
