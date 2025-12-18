@@ -296,4 +296,16 @@ class LambdaPreprocessingPipelineStack(Stack):
             role=data_preprocessing_lambda_role,
             timeout=Duration.minutes(15),
             memory_size=512,
+            environment={
+                'APP_PREFIX': app_prefix,
+                'PROCESSING_INSTANCE_TYPE': 'ml.t3.medium',
+                'PROCESSING_INSTANCE_COUNT': '1',
+                'SKLEARN_VERSION': '1.2-1',
+                'SAGEMAKER_ROLE_ARN': self.data_preprocessing_role.role_arn
+            }
         )
+        
+        # Grant permissions to the Lambda role
+        self.raw_data_bucket.grant_read(data_preprocessing_lambda_role)
+        self.processed_data_bucket.grant_write(data_preprocessing_lambda_role)
+        self.model_artifacts_bucket.grant_read(data_preprocessing_lambda_role)
