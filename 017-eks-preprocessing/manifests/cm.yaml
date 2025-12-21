@@ -1,0 +1,114 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: preprocessing-script
+  namespace: mlops
+data:
+  preprocessing_script.py: |
+    import sys
+    import os
+    import subprocess
+    
+    # Upgrade boto3 to support Pod Identity
+    print("📦 Upgrading boto3 to support EKS Pod Identity...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "boto3>=1.28.0", "botocore>=1.31.0", "-q"])
+    print("✅ boto3 upgraded successfully")
+    
+    import pandas as pd
+    import json
+    import numpy as np
+    from datetime import datetime
+    import boto3
+    
+    # Configuration from environment
+    input_bucket = os.environ.get('INPUT_BUCKET')
+    output_bucket = os.environ.get('OUTPUT_BUCKET')
+    input_key = os.environ.get('INPUT_KEY')
+    
+    print("🔐 Initializing AWS S3 client with EKS Pod Identity...")
+    s3_client = boto3.client('s3')
+    print("✅ S3 client initialized successfully")
+    
+    # Download from S3
+    local_input = '/opt/ml/processing/input/mock_data.csv'
+    os.makedirs('/opt/ml/processing/input', exist_ok=True)
+    os.makedirs('/opt/ml/processing/output', exist_ok=True)
+    
+    print(f"📥 Downloading s3://{input_bucket}/{input_key}")
+    s3_client.download_file(input_bucket, input_key, local_input)
+    
+    # Load dataset
+    df = pd.read_csv(local_input)
+    print(f"✅ Dataset loaded: {df.shape}")
+    
+    # Fill missing values
+    print("\n📊 Filling missing values...")
+    age_median = df['age'].median()
+    salary_median = df['salary'].median()
+    df['age'] = df['age'].fillna(age_median)
+    df['salary'] = df['salary'].fillna(salary_median)
+    df['department'] = df['department'].fillna('Unknown')
+    
+    # Parse profile JSON
+    print("\n🔧 Extracting profile fields...")
+    df['profile'] = df['profile'].apply(lambda x: json.loads(x) if pd.notnull(x) else {})
+    df['address'] = df['profile'].apply(lambda x: x.get('address', None))
+    df['phone'] = df['profile'].apply(lambda x: x.get('phone', None))
+    df['email'] = df['profile'].apply(lambda x: x.get('email', None))
+    
+    # Drop profile column
+    cleaned_df = df.drop(columns=['profile'])
+    
+    # Save cleaned data
+    cleaned_df.to_csv("/opt/ml/processing/output/cleaned_data.csv", index=False)
+    print("✅ Saved: cleaned_data.csv")
+    
+    # Transform data
+    transform_df = cleaned_df.copy()
+    transform_df['address_length'] = transform_df['address'].apply(lambda x: len(str(x)))
+    
+    # Salary categories
+    bins = [0, 50000, 70000, 100000]
+    labels = ['low', 'medium', 'high']
+    transform_df['salary_category'] = pd.cut(transform_df['salary'], bins=bins, labels=labels, include_lowest=True)
+    
+    # Age groups
+    age_bins = [0, 25, 35, 45, 55, float('inf')]
+    age_labels = ['Young', 'Early Career', 'Mid Career', 'Senior', 'Experienced']
+    transform_df['age_group'] = pd.cut(transform_df['age'], bins=age_bins, labels=age_labels, include_lowest=True)
+    
+    # Save transformed data
+    transform_df.to_csv("/opt/ml/processing/output/transformed_data.csv", index=False)
+    print("✅ Saved: transformed_data.csv")
+    
+    # Department statistics
+    department_stats = transform_df.groupby('department').agg({
+        'salary': 'mean',
+        'age': 'mean'
+    }).reset_index()
+    department_stats.columns = ['Department', 'Average Salary', 'Average Age']
+    department_stats.to_csv("/opt/ml/processing/output/department_statistics.csv", index=False)
+    print("✅ Saved: department_statistics.csv")
+    
+    # Quality metrics
+    quality_metrics = {
+        'total_rows': len(transform_df),
+        'total_columns': len(transform_df.columns),
+        'missing_values_count': int(transform_df.isnull().sum().sum()),
+        'duplicate_rows': int(transform_df.duplicated().sum()),
+        'processing_timestamp': datetime.now().isoformat()
+    }
+    
+    with open('/opt/ml/processing/output/quality_metrics.json', 'w') as f:
+        json.dump(quality_metrics, f, indent=2)
+    print("✅ Saved: quality_metrics.json")
+    
+    # Upload to S3
+    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    for filename in ['cleaned_data.csv', 'transformed_data.csv', 'department_statistics.csv', 'quality_metrics.json']:
+        local_file = f'/opt/ml/processing/output/{filename}'
+        s3_key = f'output/{filename.replace(".csv", "").replace(".json", "")}_{timestamp}{os.path.splitext(filename)[1]}'
+        print(f"📤 Uploading to s3://{output_bucket}/{s3_key}")
+        s3_client.upload_file(local_file, output_bucket, s3_key)
+    
+    print("\n✅ Preprocessing completed successfully!")

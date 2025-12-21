@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: data-preprocessing-sa
+  namespace: mlops
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-preprocessing
+  namespace: mlops
+  labels:
+    app: data-preprocessing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: data-preprocessing
+  template:
+    metadata:
+      labels:
+        app: data-preprocessing
+    spec:
+      serviceAccountName: data-preprocessing-sa
+      containers:
+      - name: preprocessing
+        # Using newer SageMaker scikit-learn image with Pod Identity support
+        image: 683313688378.dkr.ecr.us-east-1.amazonaws.com/sagemaker-scikit-learn:1.4-2-cpu-py3
+        command: ["python3"]
+        args: ["/opt/ml/processing/input/code/preprocessing_script.py"]
+        env:
+        - name: INPUT_BUCKET
+          value: "eks-demo-raw-data-bucket"
+        - name: OUTPUT_BUCKET
+          value: "eks-demo-processed-data-bucket"
+        - name: INPUT_KEY
+          value: "data/mock_data.csv"
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
+        - name: AWS_REGION
+          value: "us-east-1"
+        volumeMounts:
+        - name: script
+          mountPath: /opt/ml/processing/input/code
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+      volumes:
+      - name: script
+        configMap:
+          name: preprocessing-script
+          defaultMode: 0755
