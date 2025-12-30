@@ -31,6 +31,9 @@ class EksClusterStack(Stack):
         self.__add_nodegroup(cluster=self.cluster, app_prefix=app_prefix)
         self.__add_addon(cluster=self.cluster)
 
+        # Add SQS Queue and S3 Event Notifications for event-driven processing
+        self.__create_sqs_queue_with_s3_event_notification(app_prefix=app_prefix)
+
         # # Create Pod Identity Association for data preprocessing tasks
         self.__create_pod_identity_association(app_prefix=app_prefix)
 
@@ -184,6 +187,16 @@ class EksClusterStack(Stack):
                 iam.ManagedPolicy.from_aws_managed_policy_name("AdministratorAccess")  # WARNING: Full admin access
             ]
         )
+
+        # Create KEDA Role
+        self.keda_role = iam.Role(
+            self,
+            f"{app_prefix}-keda-role",
+            assumed_by=iam.PrincipalWithConditions(
+                iam.ServicePrincipal("pods.eks.amazonaws.com"),
+                conditions={}
+            ).with_session_tags()
+        )
   
     def __create_eks_cluster(self, app_prefix: str) -> None:
         """
@@ -295,6 +308,71 @@ class EksClusterStack(Stack):
             }
         )
 
+    def __create_sqs_queue_with_s3_event_notification(self, app_prefix: str) -> None:
+        """
+        Create SQS Queue and configure S3 Event Notifications for event-driven processing.
+        :param app_prefix: Prefix for naming resources.
+        """
+
+        from aws_cdk import aws_sqs as sqs
+        from aws_cdk import aws_s3_notifications as s3n
+
+        # Create SQS Queue
+        self.preprocessing_queue = sqs.Queue(
+            self,
+            f"{app_prefix}-s3-event-queue",
+            queue_name=f"{app_prefix}-s3-event-queue",
+            visibility_timeout=Duration.seconds(300),
+            retention_period=Duration.days(1),
+        )
+
+        # Configure S3 Event Notification for raw data bucket (e.g., on object created)
+        notification = s3n.SqsDestination(self.preprocessing_queue)
+        self.raw_data_bucket.add_event_notification(
+            s3.EventType.OBJECT_CREATED,
+            notification
+        )
+
+        self.preprocessing_queue.add_to_resource_policy(
+            iam.PolicyStatement(
+                principals=[iam.ServicePrincipal("s3.amazonaws.com")],
+                actions=["sqs:SendMessage"],
+                resources=[self.preprocessing_queue.queue_arn],
+                conditions={
+                    "ArnEquals": {
+                        "aws:SourceArn": self.raw_data_bucket.bucket_arn
+                    }
+                }
+            )
+        )
+
+        # Grant KEDA role permissions to read from the SQS queue
+        self.keda_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "sqs:GetQueueAttributes",
+                    "sqs:GetQueueUrl",
+                    "sqs:ReceiveMessage",
+                    "sqs:DeleteMessage",
+                ],
+                resources=[self.preprocessing_queue.queue_arn],
+            )
+        )
+
+        # Grant data preprocessing role permissions to read from the SQS queue
+        self.data_preprocessing_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "sqs:GetQueueAttributes",
+                    "sqs:GetQueueUrl",
+                    "sqs:ReceiveMessage",
+                    "sqs:DeleteMessage",
+                    "sqs:*"
+                ],
+                resources=[self.preprocessing_queue.queue_arn],
+            )
+        )
+
     def __add_addon(self, cluster: eks.Cluster):
 
         # VPC CNI Addon
@@ -350,7 +428,7 @@ class EksClusterStack(Stack):
   
     def __create_pod_identity_association(self, app_prefix: str) -> None:
         """
-        Create Pod Identity Association for data preprocessing tasks.
+        Create Pod Identity Association for data preprocessing tasks and KEDA.
         :param app_prefix: Prefix for naming resources.
         """
 
@@ -362,4 +440,14 @@ class EksClusterStack(Stack):
             namespace="mlops",
             role_arn=self.data_preprocessing_role.role_arn,
             service_account="data-preprocessing-sa",
+        )
+
+        # Create Pod Identity Association for KEDA
+        eks.CfnPodIdentityAssociation(
+            self,
+            f"{app_prefix}-keda-pod-identity",
+            cluster_name=self.cluster.cluster_name,
+            namespace="keda",
+            service_account="keda-operator",
+            role_arn=self.keda_role.role_arn,
         )

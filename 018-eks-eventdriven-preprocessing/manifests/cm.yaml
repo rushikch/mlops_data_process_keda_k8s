@@ -14,101 +14,192 @@ data:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "boto3>=1.28.0", "botocore>=1.31.0", "-q"])
     print("✅ boto3 upgraded successfully")
     
-    import pandas as pd
     import json
+    import pandas as pd
     import numpy as np
     from datetime import datetime
     import boto3
+
+    # -------------------------------------------------------------------
+    # 1. Read SQS message from queue
+    # -------------------------------------------------------------------
+    sqs_queue_url = os.environ.get("SQS_QUEUE_URL")
+    if not sqs_queue_url:
+        raise RuntimeError("❌ SQS_QUEUE_URL environment variable not found")
+
+    # Initialize SQS client
+    sqs_client = boto3.client("sqs")
     
-    # Configuration from environment
-    input_bucket = os.environ.get('INPUT_BUCKET')
-    output_bucket = os.environ.get('OUTPUT_BUCKET')
-    input_key = os.environ.get('INPUT_KEY')
+    # Receive message from SQS
+    response = sqs_client.receive_message(
+        QueueUrl=sqs_queue_url,
+        MaxNumberOfMessages=1,
+        WaitTimeSeconds=10
+    )
     
-    print("🔐 Initializing AWS S3 client with EKS Pod Identity...")
-    s3_client = boto3.client('s3')
-    print("✅ S3 client initialized successfully")
+    if "Messages" not in response:
+        print("⚠️ No messages in queue, exiting...")
+        exit(0)
     
-    # Download from S3
-    local_input = '/opt/ml/processing/input/mock_data.csv'
-    os.makedirs('/opt/ml/processing/input', exist_ok=True)
-    os.makedirs('/opt/ml/processing/output', exist_ok=True)
+    message = response["Messages"][0]
+    sqs_message = message["Body"]
+    receipt_handle = message["ReceiptHandle"]
     
-    print(f"📥 Downloading s3://{input_bucket}/{input_key}")
+    print(f"📨 Received SQS message: {sqs_message[:100]}...")
+    
+    try:
+        event = json.loads(sqs_message)
+    except json.JSONDecodeError:
+        print("❌ Failed to parse SQS message as JSON")
+        # Delete the malformed message
+        sqs_client.delete_message(QueueUrl=sqs_queue_url, ReceiptHandle=receipt_handle)
+        exit(1)
+
+    # Handle first S3 record (1 job = 1 object)
+    record = event["Records"][0]
+    input_bucket = record["s3"]["bucket"]["name"]
+    input_key = record["s3"]["object"]["key"]
+
+    output_bucket = os.environ.get("OUTPUT_BUCKET")
+
+    print(f"📥 Processing S3 object: s3://{input_bucket}/{input_key}")
+    print(f"📤 Output bucket: {output_bucket}")
+
+    # -------------------------------------------------------------------
+    # 2. Initialize S3 client (Pod Identity is already injected)
+    # -------------------------------------------------------------------
+    s3_client = boto3.client("s3")
+    print("🔐 S3 client initialized using EKS Pod Identity")
+
+    # -------------------------------------------------------------------
+    # 3. Prepare local directories
+    # -------------------------------------------------------------------
+    local_input = "/opt/ml/processing/input/input.csv"
+    input_dir = "/opt/ml/processing/input"
+    output_dir = "/opt/ml/processing/output"
+
+    os.makedirs(input_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
+
+    # -------------------------------------------------------------------
+    # 4. Download input data from S3
+    # -------------------------------------------------------------------
+    print(f"📥 Downloading file...")
     s3_client.download_file(input_bucket, input_key, local_input)
-    
-    # Load dataset
+
     df = pd.read_csv(local_input)
-    print(f"✅ Dataset loaded: {df.shape}")
-    
-    # Fill missing values
-    print("\n📊 Filling missing values...")
-    age_median = df['age'].median()
-    salary_median = df['salary'].median()
-    df['age'] = df['age'].fillna(age_median)
-    df['salary'] = df['salary'].fillna(salary_median)
-    df['department'] = df['department'].fillna('Unknown')
-    
-    # Parse profile JSON
-    print("\n🔧 Extracting profile fields...")
-    df['profile'] = df['profile'].apply(lambda x: json.loads(x) if pd.notnull(x) else {})
-    df['address'] = df['profile'].apply(lambda x: x.get('address', None))
-    df['phone'] = df['profile'].apply(lambda x: x.get('phone', None))
-    df['email'] = df['profile'].apply(lambda x: x.get('email', None))
-    
-    # Drop profile column
-    cleaned_df = df.drop(columns=['profile'])
-    
-    # Save cleaned data
-    cleaned_df.to_csv("/opt/ml/processing/output/cleaned_data.csv", index=False)
-    print("✅ Saved: cleaned_data.csv")
-    
-    # Transform data
+    print(f"✅ Dataset loaded with shape: {df.shape}")
+
+    # -------------------------------------------------------------------
+    # 5. Data Cleaning
+    # -------------------------------------------------------------------
+    print("📊 Filling missing values...")
+    df["age"] = df["age"].fillna(df["age"].median())
+    df["salary"] = df["salary"].fillna(df["salary"].median())
+    df["department"] = df["department"].fillna("Unknown")
+
+    # -------------------------------------------------------------------
+    # 6. Parse JSON profile column
+    # -------------------------------------------------------------------
+    print("🔧 Extracting profile fields...")
+    df["profile"] = df["profile"].apply(
+        lambda x: json.loads(x) if pd.notnull(x) else {}
+    )
+
+    df["address"] = df["profile"].apply(lambda x: x.get("address"))
+    df["phone"] = df["profile"].apply(lambda x: x.get("phone"))
+    df["email"] = df["profile"].apply(lambda x: x.get("email"))
+
+    cleaned_df = df.drop(columns=["profile"])
+
+    # -------------------------------------------------------------------
+    # 7. Save cleaned data
+    # -------------------------------------------------------------------
+    cleaned_path = f"{output_dir}/cleaned_data.csv"
+    cleaned_df.to_csv(cleaned_path, index=False)
+    print("✅ Saved cleaned_data.csv")
+
+    # -------------------------------------------------------------------
+    # 8. Feature Engineering
+    # -------------------------------------------------------------------
     transform_df = cleaned_df.copy()
-    transform_df['address_length'] = transform_df['address'].apply(lambda x: len(str(x)))
-    
+    transform_df["address_length"] = transform_df["address"].apply(lambda x: len(str(x)))
+
     # Salary categories
-    bins = [0, 50000, 70000, 100000]
-    labels = ['low', 'medium', 'high']
-    transform_df['salary_category'] = pd.cut(transform_df['salary'], bins=bins, labels=labels, include_lowest=True)
-    
+    transform_df["salary_category"] = pd.cut(
+        transform_df["salary"],
+        bins=[0, 50000, 70000, 100000],
+        labels=["low", "medium", "high"],
+        include_lowest=True
+    )
+
     # Age groups
-    age_bins = [0, 25, 35, 45, 55, float('inf')]
-    age_labels = ['Young', 'Early Career', 'Mid Career', 'Senior', 'Experienced']
-    transform_df['age_group'] = pd.cut(transform_df['age'], bins=age_bins, labels=age_labels, include_lowest=True)
-    
-    # Save transformed data
-    transform_df.to_csv("/opt/ml/processing/output/transformed_data.csv", index=False)
-    print("✅ Saved: transformed_data.csv")
-    
-    # Department statistics
-    department_stats = transform_df.groupby('department').agg({
-        'salary': 'mean',
-        'age': 'mean'
-    }).reset_index()
-    department_stats.columns = ['Department', 'Average Salary', 'Average Age']
-    department_stats.to_csv("/opt/ml/processing/output/department_statistics.csv", index=False)
-    print("✅ Saved: department_statistics.csv")
-    
-    # Quality metrics
+    transform_df["age_group"] = pd.cut(
+        transform_df["age"],
+        bins=[0, 25, 35, 45, 55, float("inf")],
+        labels=["Young", "Early Career", "Mid Career", "Senior", "Experienced"],
+        include_lowest=True
+    )
+
+    # -------------------------------------------------------------------
+    # 9. Save transformed data
+    # -------------------------------------------------------------------
+    transformed_path = f"{output_dir}/transformed_data.csv"
+    transform_df.to_csv(transformed_path, index=False)
+    print("✅ Saved transformed_data.csv")
+
+    # -------------------------------------------------------------------
+    # 10. Department statistics
+    # -------------------------------------------------------------------
+    department_stats = (
+        transform_df
+        .groupby("department")[["salary", "age"]]
+        .mean()
+        .reset_index()
+    )
+
+    dept_stats_path = f"{output_dir}/department_statistics.csv"
+    department_stats.to_csv(dept_stats_path, index=False)
+    print("✅ Saved department_statistics.csv")
+
+    # -------------------------------------------------------------------
+    # 11. Data quality metrics
+    # -------------------------------------------------------------------
     quality_metrics = {
-        'total_rows': len(transform_df),
-        'total_columns': len(transform_df.columns),
-        'missing_values_count': int(transform_df.isnull().sum().sum()),
-        'duplicate_rows': int(transform_df.duplicated().sum()),
-        'processing_timestamp': datetime.now().isoformat()
+        "total_rows": int(len(transform_df)),
+        "total_columns": int(len(transform_df.columns)),
+        "missing_values_count": int(transform_df.isnull().sum().sum()),
+        "duplicate_rows": int(transform_df.duplicated().sum()),
+        "processing_timestamp": datetime.utcnow().isoformat()
     }
-    
-    with open('/opt/ml/processing/output/quality_metrics.json', 'w') as f:
+
+    quality_path = f"{output_dir}/quality_metrics.json"
+    with open(quality_path, "w") as f:
         json.dump(quality_metrics, f, indent=2)
-    print("✅ Saved: quality_metrics.json")
+
+    print("✅ Saved quality_metrics.json")
+
+    # -------------------------------------------------------------------
+    # 12. Upload outputs to S3
+    # -------------------------------------------------------------------
+    timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+
+    outputs = {
+        "cleaned_data.csv": cleaned_path,
+        "transformed_data.csv": transformed_path,
+        "department_statistics.csv": dept_stats_path,
+        "quality_metrics.json": quality_path,
+    }
+
+    for name, path in outputs.items():
+        s3_key = f"output/{name.replace('.', '_')}_{timestamp}{os.path.splitext(name)[1]}"
+        print(f"📤 Uploading s3://{output_bucket}/{s3_key}")
+        s3_client.upload_file(path, output_bucket, s3_key)
+
+    print("🎉 Preprocessing completed successfully!")
     
-    # Upload to S3
-    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-    for filename in ['cleaned_data.csv', 'transformed_data.csv', 'department_statistics.csv', 'quality_metrics.json']:
-        local_file = f'/opt/ml/processing/output/{filename}'
-        s3_key = f'output/{filename.replace(".csv", "").replace(".json", "")}_{timestamp}{os.path.splitext(filename)[1]}'
-        print(f"📤 Uploading to s3://{output_bucket}/{s3_key}")
-        s3_client.upload_file(local_file, output_bucket, s3_key)
-    
-    print("\n✅ Preprocessing completed successfully!")
+    # -------------------------------------------------------------------
+    # 13. Delete processed message from SQS
+    # -------------------------------------------------------------------
+    sqs_client.delete_message(QueueUrl=sqs_queue_url, ReceiptHandle=receipt_handle)
+    print("✅ SQS message deleted successfully")
