@@ -8,7 +8,7 @@
   <h1>🚀 MLOps with AWS - Complete Implementation Guides</h1>
   <a href="https://github.com/anveshmuppeda/mlops"><img src="https://readme-typing-svg.demolab.com?font=italic&weight=700&size=18&duration=4000&pause=1000&color=F727A9&center=true&width=600&lines=Learn+mlops+with+hands-on+guides+and+practical+examples." alt="Typing SVG" /> </a>  
   <br>
-  <h2>I built an 𝒆𝒗𝒆𝒏𝒕-𝒅𝒓𝒊𝒗𝒆𝒏 𝑴𝑳𝑶𝒑𝒔 pipeline where:
+  <h2>This is an 𝒆𝒗𝒆𝒏𝒕-𝒅𝒓𝒊𝒗𝒆𝒏 𝑴𝑳𝑶𝒑𝒔 pipeline where:
 ☞ Data scientists upload data to S3
 ☞ S3 sends events to SQS
 ☞ KEDA automatically spins up EKS jobs
